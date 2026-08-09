@@ -1,5 +1,6 @@
 import React from 'react';
 import { Layout, Users, Sparkles, PlusCircle, RotateCcw, ShieldCheck, Sliders } from 'lucide-react';
+import logoImg from '../assets/logo.png';
 
 interface HeaderProps {
   hasApiKey: boolean;
@@ -21,13 +22,9 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('board')}>
               <div className="bg-stone-800 p-1 rounded-lg border border-stone-700 shadow-inner">
                 <img 
-                  src="/logo.png" 
+                  src={logoImg} 
                   alt="Leatherheads Logo" 
                   className="w-8 h-8 object-contain"
-                  onError={(e) => {
-                    e.currentTarget.style.display = 'none';
-                    e.currentTarget.parentElement!.innerHTML = '<div class="w-8 h-8 bg-amber-900 rounded-full"></div>';
-                  }}
                 />
               </div>
               <span className="text-xl font-black tracking-tighter text-stone-100 uppercase">LEATHERHEADS</span>
