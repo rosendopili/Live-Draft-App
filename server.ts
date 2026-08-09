@@ -15,9 +15,16 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing');
+    throw new Error('GEMINI_API_KEY is missing from environment variables.');
   }
-  return new GoogleGenAI(apiKey);
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
 };
 
 app.get('/api/health', (req, res) => {
@@ -33,7 +40,9 @@ app.post('/api/ocr', async (req, res) => {
   try {
     const { image, totalTeams, totalRounds, customInstructions, teamNames } = req.body;
 
-    if (!image) return res.status(400).json({ error: 'No image' });
+    if (!image) {
+      return res.status(400).json({ error: 'Image data is required.' });
+    }
 
     let mimeType = 'image/jpeg';
     let base64Data = image;
@@ -45,19 +54,46 @@ app.post('/api/ocr', async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const systemPrompt = `You are a fantasy football draft board OCR system. Transcribe stickers into JSON. Teams: ${totalTeams || 12}, Rounds: ${totalRounds || 16}. ${customInstructions || ''}`;
-    const promptText = `Extract all draft stickers: round, pick, player_name, position, nfl_team, confidence_score.`;
+    const systemPrompt = `You are an expert OCR vision system specialized in reading physical fantasy football draft boards. Your sole job is to transcribe player draft stickers from a photo into structured JSON data.
 
-    const result = await model.generateContent({
-      contents: [{
-        role: 'user',
+### GRID AND POSITION RULES
+1. Spatial Mapping: Draft boards are organized in a grid of Rounds (Rows) and Teams/Picks (Columns).
+   - Horizontal position determines Column / Team Pick order.
+   - Vertical position determines Round number (starting from Round 1 at the top).
+2. Read Direction: Scan row-by-row from top-left to bottom-right.
+3. Empty Spots: Ignore empty slots where no sticker has been placed yet. Do NOT invent or predict future picks.
+
+### EXTRACTION & CORRECTION RULES
+1. Name Extraction: Correct slight spelling errors or handwriting ambiguities to the standard NFL player name (e.g., if sticker says "J. Jefferson", output "Justin Jefferson").
+2. Position Standard: Normalize positions to strictly one of: ["QB", "RB", "WR", "TE", "K", "DST"].
+3. NFL Team Standard: Normalize NFL teams to standard 2 or 3-letter uppercase abbreviations.
+4. Contextual Disambiguation: If a player's name is partially blocked or blurry, use the surrounding position label and team abbreviation on the sticker to resolve their identity correctly.
+5. Confidence Rating: Assign a float value from 0.0 to 1.0 based on how clear and legible the sticker text is.
+
+${totalTeams ? `Note: User specifies that this draft board has approx ${totalTeams} teams (columns).` : ''}
+${totalRounds ? `Note: User specifies that this draft board has approx ${totalRounds} rounds (rows).` : ''}
+${customInstructions ? `Additional User Instructions: ${customInstructions}` : ''}
+
+Output strictly formatted JSON matching the required schema.`;
+
+    const promptText = `Analyze this physical fantasy football draft board photo. Identify all placed draft stickers, map their grid coordinates (round number and team column), extract full normalized NFL player names, standardized positions, and 2-3 letter uppercase NFL team abbreviations. Calculate overall pick numbers based on standard grid structure. Assign confidence scores between 0.0 and 1.0 for each sticker.`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: {
         parts: [
-          { inlineData: { mimeType, data: base64Data } },
-        ]
-      }],
-      generationConfig: {
+          {
+            inlineData: {
+              mimeType,
+              data: base64Data,
+            },
+          },
+          { text: promptText },
+        ],
+      },
+      config: {
+        systemInstruction: systemPrompt,
         temperature: 0.1,
         responseMimeType: 'application/json',
         responseSchema: {
@@ -65,43 +101,43 @@ app.post('/api/ocr', async (req, res) => {
           properties: {
             drafted_players: {
               type: Type.ARRAY,
+              description: 'List of all detected player stickers on the draft board.',
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  round: { type: Type.INTEGER },
-                  pick: { type: Type.INTEGER },
-                  player_name: { type: Type.STRING },
-                  position: { type: Type.STRING },
-                  nfl_team: { type: Type.STRING },
-                  confidence_score: { type: Type.NUMBER }
+                  round: { type: Type.INTEGER, description: 'Draft round number starting at 1' },
+                  pick: { type: Type.INTEGER, description: 'Pick number within the round' },
+                  player_name: { type: Type.STRING, description: 'Corrected full name of NFL player' },
+                  position: { type: Type.STRING, description: 'QB, RB, WR, TE, K, or DST' },
+                  nfl_team: { type: Type.STRING, description: '3-letter uppercase abbreviation' },
+                  confidence_score: { type: Type.NUMBER, description: 'Float from 0.0 to 1.0' },
                 },
-                required: ['round', 'pick', 'player_name', 'position', 'nfl_team', 'confidence_score']
-              }
-            }
+                required: ['round', 'pick', 'player_name', 'position', 'nfl_team', 'confidence_score'],
+              },
+            },
           },
-          required: ['drafted_players']
-        }
-      }
+          required: ['drafted_players'],
+        },
+      },
     });
 
-    const response = await result.response;
-    const rawText = response.text();
-    const parsedData = JSON.parse(rawText);
+    const duration = Date.now() - startTime;
+    const rawText = response.text || '{}';
+    let parsedData = JSON.parse(rawText);
+
     const rawPlayers = parsedData.drafted_players || [];
-    
     let maxTeamCol = Number(totalTeams) || 12;
 
     const formattedPicks = rawPlayers.map((p: any) => {
-      const round = Number(p.round) || 1;
+      const roundNum = Number(p.round) || 1;
       const pickInRound = Number(p.pick) || 1;
-      const overallPick = ((round - 1) * maxTeamCol + pickInRound);
       return {
-        round,
+        round: roundNum,
         pick_in_round: pickInRound,
-        overall_pick: overallPick,
+        overall_pick: ((roundNum - 1) * maxTeamCol + pickInRound),
         team_column: pickInRound,
         team_name: (teamNames && teamNames[pickInRound]) || `Team ${pickInRound}`,
-        player_name: p.player_name || 'Unknown',
+        player_name: p.player_name || 'Unknown Player',
         position: p.position || 'WR',
         nfl_team: p.nfl_team || 'NFL',
         confidence: p.confidence_score || 0.9,
@@ -112,10 +148,11 @@ app.post('/api/ocr', async (req, res) => {
     res.json({
       draft_info: { total_teams: maxTeamCol, total_rounds: Number(totalRounds) || 16, teams: [] },
       picks: formattedPicks,
-      summary: { total_detected: formattedPicks.length, avg_confidence: 0.9 }
+      summary: { total_detected: formattedPicks.length, avg_confidence: 0.9 },
+      processing_time_ms: duration
     });
   } catch (error: any) {
-    console.error('OCR Error:', error);
+    console.error('OCR API Error:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -123,10 +160,12 @@ app.post('/api/ocr', async (req, res) => {
 app.post('/api/recommend', async (req, res) => {
   try {
     const ai = getGeminiClient();
-    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
-    const result = await model.generateContent(req.body.prompt || 'Give fantasy draft advice');
-    const response = await result.response;
-    res.json({ recommendation: response.text() });
+    const { myTeamName, myTeamColumn, prompt } = req.body;
+    const response = await ai.models.generateContent({
+      model: 'gemini-3.6-flash',
+      contents: prompt || `Give fantasy draft advice for ${myTeamName}`
+    });
+    res.json({ recommendation: response.text || 'No recommendation available.' });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -142,4 +181,4 @@ async function startServer() {
   if (!process.env.VERCEL) app.listen(PORT);
 }
 startServer();
-export default a
+export default app;
