@@ -38,11 +38,11 @@ export default function App() {
 
   const [draftSettings, setDraftSettings] = useState<DraftSettings>({
     total_teams: 12, total_rounds: 16, draft_type: 'snake', scoring_format: 'PPR', my_team_column: 1, time_per_pick: 60,
-    team_names: Object.fromEntries(Array.from({length: 16}, (_, i) => [i+1, \`Team \${i+1}\`])),
+    team_names: Object.fromEntries(Array.from({length: 16}, (_, i) => [i+1, `Team ${i+1}`])),
   });
 
   const [ocrResult, setOcrResult] = useState<OCRResult>({
-    draft_info: { league_name: 'My Draft', total_teams: 12, total_rounds: 16, teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: \`Team \${i + 1}\` })) },
+    draft_info: { league_name: 'My Draft', total_teams: 12, total_rounds: 16, teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: `Team ${i + 1}` })) },
     picks: [],
   });
 
