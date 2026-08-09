@@ -67,41 +67,65 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
   const executeOcr = async (imageData: string) => {
     setIsLoading(true);
     setErrorMsg(null);
-    setStatusText('Analyzing spatial grid & reading draft stickers with Gemini 3.6 Flash...');
+    setStatusText('Preparing image & normalizing resolution...');
 
     try {
+      // 1. Downscale image more aggressively to stay under Vercel's 4.5MB payload limit
+      // 1500px at 0.7 quality is usually < 1MB, well within limits.
+      const optimizedImage = await resizeImage(imageData, 1500);
+      
+      setStatusText('Analyzing spatial grid & reading draft stickers with Gemini 3.6 Flash...');
+
       const response = await fetch('/api/ocr', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          image: imageData,
+          image: optimizedImage,
           totalTeams: teamsOverride,
           totalRounds: roundsOverride,
           customInstructions: customPrompt,
           teamNames: draftSettings?.team_names,
         }),
       });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process image');
-      }
-
-      setStatusText('Extraction complete!');
-      onProcessComplete(data, imageData);
-    } catch (err: any) {
-      console.error('OCR error:', err);
-      setErrorMsg(err.message || 'Error occurred during image OCR transcription.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
+// ... existing code ...
   const handleSelectSample = (sample: typeof SAMPLE_BOARDS[0]) => {
     setSelectedImage(sample.thumbnailUrl);
     // Directly pass sample pre-calculated result for instantaneous preview or offer re-scan
     onProcessComplete(sample.picksData, sample.thumbnailUrl);
+  };
+
+  /**
+   * Helper to downscale large images in the browser
+   */
+  const resizeImage = (base64Str: string, maxDimension: number): Promise<string> => {
+    return new Promise((resolve) => {
+      const img = new Image();
+      img.src = base64Str;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height) {
+          if (width > maxDimension) {
+            height *= maxDimension / width;
+            width = maxDimension;
+          }
+        } else {
+          if (height > maxDimension) {
+            width *= maxDimension / height;
+            height = maxDimension;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality to ensure small payload
+      };
+      img.onerror = () => resolve(base64Str); // Fallback to original if error
+    });
   };
 
   return (
