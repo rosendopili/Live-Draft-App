@@ -16,7 +16,7 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
       .filter((p: any) => p.active && ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.position))
       .map((p: any) => ({
         id: p.player_id,
-        name: \`\${p.first_name} \${p.last_name}\`,
+        name: `${p.first_name} ${p.last_name}`,
         position: (p.position === 'DEF' ? 'DST' : p.position) as Position,
         nflTeam: p.team || 'FA',
         adp: 999,
@@ -26,7 +26,7 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
         byeWeek: p.search_rank || 0,
         projectedPtsPPR: 0,
         tags: [p.status],
-        notes: \`Age: \${p.age || 'N/A'}\`,
+        notes: `Age: ${p.age || 'N/A'}`,
         injuryStatus: p.injury_status // "Questionable", "Doubtful", "IR", etc.
       }));
 
