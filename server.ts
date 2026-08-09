@@ -17,16 +17,9 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 const getGeminiClient = () => {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is missing from environment variables. Please check Settings > Secrets in AI Studio.');
+    throw new Error('GEMINI_API_KEY is missing from environment variables. Please check Settings > Secrets in Vercel Dashboard.');
   }
-  return new GoogleGenAI({
-    apiKey,
-    httpOptions: {
-      headers: {
-        'User-Agent': 'aistudio-build',
-      },
-    },
-  });
+  return new GoogleGenAI(apiKey);
 };
 
 // Health Check API
@@ -58,53 +51,10 @@ app.post('/api/ocr', async (req, res) => {
       base64Data = parts[1];
     }
 
-    // Handle SVG data URIs or unsupported formats by defaulting to jpeg inline
-    if (mimeType.includes('svg')) {
-      mimeType = 'image/png';
-    }
-
     const ai = getGeminiClient();
-
-    const systemPrompt = `You are an expert OCR vision system specialized in reading physical fantasy football draft boards. Your sole job is to transcribe player draft stickers from a photo into structured JSON data.
-
-### GRID AND POSITION RULES
-1. Spatial Mapping: Draft boards are organized in a grid of Rounds (Rows) and Teams/Picks (Columns).
-   - Horizontal position determines Column / Team Pick order.
-   - Vertical position determines Round number (starting from Round 1 at the top).
-2. Read Direction: Scan row-by-row from top-left to bottom-right.
-3. Empty Spots: Ignore empty slots where no sticker has been placed yet. Do NOT invent or predict future picks.
-
-### EXTRACTION & CORRECTION RULES
-1. Name Extraction: Correct slight spelling errors or handwriting ambiguities to the standard NFL player name (e.g., if sticker says "J. Jefferson", output "Justin Jefferson").
-2. Position Standard: Normalize positions to strictly one of: ["QB", "RB", "WR", "TE", "K", "DST"].
-3. NFL Team Standard: Normalize NFL teams to standard 2 or 3-letter uppercase abbreviations (e.g., "MIN", "KC", "SF", "PHI", "BAL", "BUF", "DAL", "DET", "LAR", "MIA", "NYJ", "GB").
-4. Contextual Disambiguation: If a player's name is partially blocked or blurry, use the surrounding position label and team abbreviation on the sticker to resolve their identity correctly.
-5. Confidence Rating: Assign a float value from 0.0 to 1.0 based on how clear and legible the sticker text is.
-
-${totalTeams ? `Note: User specifies that this draft board has approx ${totalTeams} teams (columns).` : ''}
-${totalRounds ? `Note: User specifies that this draft board has approx ${totalRounds} rounds (rows).` : ''}
-${customInstructions ? `Additional User Instructions: ${customInstructions}` : ''}
-
-Output strictly formatted JSON matching the required schema.`;
-
-    const promptText = `Analyze this physical fantasy football draft board photo. Identify all placed draft stickers, map their grid coordinates (round number and team column), extract full normalized NFL player names, standardized positions, and 2-3 letter uppercase NFL team abbreviations. Calculate overall pick numbers based on standard grid structure. Assign confidence scores between 0.0 and 1.0 for each sticker.`;
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-3.6-flash',
-      contents: {
-        parts: [
-          {
-            inlineData: {
-              mimeType,
-              data: base64Data,
-            },
-          },
-          { text: promptText },
-        ],
-      },
-      config: {
-        systemInstruction: systemPrompt,
-        temperature: 0.1,
+    const model = ai.getGenerativeModel({ 
+      model: 'gemini-2.0-flash-lite-preview-02-05',
+      generationConfig: {
         responseMimeType: 'application/json',
         responseSchema: {
           type: Type.OBJECT,
@@ -128,11 +78,48 @@ Output strictly formatted JSON matching the required schema.`;
           },
           required: ['drafted_players'],
         },
-      },
+      }
     });
 
+    const systemPrompt = `You are an expert OCR vision system specialized in reading physical fantasy football draft boards. Your sole job is to transcribe player draft stickers from a photo into structured JSON data.
+
+### GRID AND POSITION RULES
+1. Spatial Mapping: Draft boards are organized in a grid of Rounds (Rows) and Teams/Picks (Columns).
+   - Horizontal position determines Column / Team Pick order.
+   - Vertical position determines Round number (starting from Round 1 at the top).
+2. Read Direction: Scan row-by-row from top-left to bottom-right.
+3. Empty Spots: Ignore empty slots where no sticker has been placed yet. Do NOT invent or predict future picks.
+
+### EXTRACTION & CORRECTION RULES
+1. Name Extraction: Correct slight spelling errors or handwriting ambiguities to the standard NFL player name (e.g., if sticker says "J. Jefferson", output "Justin Jefferson").
+2. Position Standard: Normalize positions to strictly one of: ["QB", "RB", "WR", "TE", "K", "DST"].
+3. NFL Team Standard: Normalize NFL teams to standard 2 or 3-letter uppercase abbreviations (e.g., "MIN", "KC", "SF", "PHI", "BAL", "BUF", "DAL", "DET", "LAR", "MIA", "NYJ", "GB").
+4. Contextual Disambiguation: If a player's name is partially blocked or blurry, use the surrounding position label and team abbreviation on the sticker to resolve their identity correctly.
+5. Confidence Rating: Assign a float value from 0.0 to 1.0 based on how clear and legible the sticker text is.
+
+${totalTeams ? `Note: User specifies that this draft board has approx ${totalTeams} teams (columns).` : ''}
+${totalRounds ? `Note: User specifies that this draft board has approx ${totalRounds} rounds (rows).` : ''}
+${customInstructions ? `Additional User Instructions: ${customInstructions}` : ''}`;
+
+    const promptText = `Analyze this physical fantasy football draft board photo. Identify all placed draft stickers, map their grid coordinates (round number and team column), extract full normalized NFL player names, standardized positions, and 2-3 letter uppercase NFL team abbreviations. Calculate overall pick numbers based on standard grid structure. Assign confidence scores between 0.0 and 1.0 for each sticker.`;
+
+    const result = await model.generateContent({
+      contents: [
+        {
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: base64Data } },
+            { text: `${systemPrompt}
+
+${promptText}` },
+          ],
+        },
+      ],
+    });
+
+    const response = await result.response;
+    const rawText = response.text() || '{}';
     const duration = Date.now() - startTime;
-    const rawText = response.text || '{}';
     let parsedData;
 
     try {
@@ -253,6 +240,7 @@ app.post('/api/recommend', async (req, res) => {
     const { myTeamColumn, myTeamName, scoringFormat, draftType, currentClockPick, isMyTurn, roster, posCounts, topAvailable, rosterSettings } = req.body;
 
     const ai = getGeminiClient();
+    const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const prompt = `
 You are an elite fantasy football draft expert and statistician.
@@ -280,12 +268,9 @@ Instructions:
 3. Mention tier drops, player upside, and positional scarcity. Keep tone energetic, confident, and expert-level!
 `;
 
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents: prompt,
-    });
-
-    const recommendationText = response.text || 'Recommendation currently unavailable.';
+    const result = await model.generateContent(prompt);
+    const response = await result.response;
+    const recommendationText = response.text() || 'Recommendation currently unavailable.';
     res.json({ recommendation: recommendationText });
   } catch (err: any) {
     console.error('AI Recommendation Error:', err);
@@ -293,7 +278,6 @@ Instructions:
   }
 });
 
-// ... existing code ...
 async function startServer() {
   // Vite middleware for dev or static serve for prod
   if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
@@ -305,8 +289,6 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    // Important: we don't handle the wildcard * here for Vercel, 
-    // because vercel.json handles the routing.
   }
 
   // Only start the listening server if we are not on Vercel
@@ -321,4 +303,3 @@ startServer();
 
 // Export the app for Vercel
 export default app;
-
