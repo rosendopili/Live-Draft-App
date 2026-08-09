@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { DraftPick, Position, DraftSettings, OCRResult } from '../types';
 import { NFLPlayer } from '../data/nflPlayers';
-import { X, Search, Check, Plus, UserPlus } from 'lucide-react';
+import { X, Search, Check, Plus } from 'lucide-react';
 
 interface ManualPickModalProps {
   isOpen: boolean;
@@ -45,7 +45,7 @@ export const ManualPickModal: React.FC<ManualPickModalProps> = ({
     e.preventDefault();
     const isSnake = settings.draft_type === 'snake';
     const pickInR = (isSnake && selectedRound % 2 === 0) ? settings.total_teams - selectedCol + 1 : selectedCol;
-    const overall = (selectedRound - 1) * settings.total_teams + pickInRound;
+    const overall = (selectedRound - 1) * settings.total_teams + pickInR;
 
     onSavePick({
       round: selectedRound, pick_in_round: pickInR, overall_pick: overall, team_column: selectedCol,
@@ -83,7 +83,7 @@ export const ManualPickModal: React.FC<ManualPickModalProps> = ({
               <>
                 <div className="relative">
                   <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-500" />
-                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search best available..." className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white focus:border-emerald-500 outline-none" />
+                  <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search best available..." className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-9 pr-4 py-2 text-xs text-white outline-none focus:border-emerald-500 outline-none" />
                 </div>
                 
                 <div className="flex-1 overflow-y-auto space-y-2 pr-1 custom-scrollbar">
