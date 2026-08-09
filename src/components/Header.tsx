@@ -24,7 +24,7 @@ export const Header: React.FC<HeaderProps> = ({
                 <img 
                   src={logoImg} 
                   alt="Leatherheads Logo" 
-                  className="w-14 h-14 object-cover scale-[1.5]"
+                  className="w-10 h-10 object-contain scale-[1.2]"
                 />
               </div>
               <span className="text-xl font-black tracking-tighter text-stone-100 uppercase">LEATHERHEADS</span>
