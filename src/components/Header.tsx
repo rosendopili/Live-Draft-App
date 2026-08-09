@@ -1,5 +1,5 @@
 import React from 'react';
-import { Layout, Users, Sparkles, PlusCircle, RotateCcw, ShieldCheck, ShieldAlert, Sliders } from 'lucide-react';
+import { Layout, Users, Sparkles, PlusCircle, RotateCcw, ShieldCheck, Sliders } from 'lucide-react';
 
 interface HeaderProps {
   hasApiKey: boolean;
@@ -48,8 +48,12 @@ export const Header: React.FC<HeaderProps> = ({
             <button onClick={onOpenManualPick} title="Manual Pick" className="p-2 text-slate-400 hover:text-white transition-colors"><PlusCircle className="w-5 h-5" /></button>
             <button onClick={onStartNewDraft} title="Reset Draft" className="p-2 text-slate-400 hover:text-red-400 transition-colors"><RotateCcw className="w-5 h-5" /></button>
             <div className="hidden lg:flex items-center px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-lg gap-2 ml-2">
-              {hasApiKey ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> : <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />}
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{hasApiKey ? 'AI Ready' : 'AI Offline'}</span>
+              {hasApiKey && (
+                <>
+                  <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">AI Ready</span>
+                </>
+              )}
             </div>
           </div>
         </div>
