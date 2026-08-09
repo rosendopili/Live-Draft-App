@@ -69,41 +69,41 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setErrorMsg(null);
     setStatusText('Preparing image & normalizing resolution...');
 
-    try {
-      /**
-       * Helper to downscale large images in the browser
-       */
-      const resizeImage = (base64Str: string, maxDimension: number): Promise<string> => {
-        return new Promise((resolve) => {
-          const img = new Image();
-          img.src = base64Str;
-          img.onload = () => {
-            const canvas = document.createElement('canvas');
-            let width = img.width;
-            let height = img.height;
+    /**
+     * Helper to downscale large images in the browser
+     */
+    const resizeImage = (base64Str: string, maxDimension: number): Promise<string> => {
+      return new Promise((resolve) => {
+        const img = new Image();
+        img.src = base64Str;
+        img.onload = () => {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
 
-            if (width > height) {
-              if (width > maxDimension) {
-                height *= maxDimension / width;
-                width = maxDimension;
-              }
-            } else {
-              if (height > maxDimension) {
-                width *= maxDimension / height;
-                height = maxDimension;
-              }
+          if (width > height) {
+            if (width > maxDimension) {
+              height *= maxDimension / width;
+              width = maxDimension;
             }
+          } else {
+            if (height > maxDimension) {
+              width *= maxDimension / height;
+              height = maxDimension;
+            }
+          }
 
-            canvas.width = width;
-            canvas.height = height;
-            const ctx = canvas.getContext('2d');
-            ctx?.drawImage(img, 0, 0, width, height);
-            resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality to ensure small payload
-          };
-          img.onerror = () => resolve(base64Str); // Fallback to original if error
-        });
-      };
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          ctx?.drawImage(img, 0, 0, width, height);
+          resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality to ensure small payload
+        };
+        img.onerror = () => resolve(base64Str); // Fallback to original if error
+      });
+    };
 
+    try {
       // 1. Downscale image more aggressively to stay under Vercel's 4.5MB payload limit
       // 1500px at 0.7 quality is usually < 1MB, well within limits.
       const optimizedImage = await resizeImage(imageData, 1500);
