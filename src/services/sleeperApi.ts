@@ -20,17 +20,17 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
       )
       .map((p: any) => ({
         id: p.player_id,
-        name: \`\${p.first_name} \${p.last_name}\`,
+        name: `${p.first_name} ${p.last_name}`,
         position: (p.position === 'DEF' ? 'DST' : p.position) as Position,
         nflTeam: p.team,
         adp: 999,
         tier: 5,
         rank: 999,
-        positionRank: \`\${p.position}0\`,
+        positionRank: `${p.position}0`,
         byeWeek: p.search_rank || 0,
         projectedPtsPPR: 0,
         tags: [p.status],
-        notes: \`Age: \${p.age || 'N/A'}\`,
+        notes: `Age: ${p.age || 'N/A'}`,
         injuryStatus: p.injury_status
       }));
 
