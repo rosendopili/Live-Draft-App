@@ -1,0 +1,6 @@
+{
+  "name": "DraftBoard OCR Vision System",
+  "description": "Expert AI vision system for transcribing physical fantasy football draft board stickers into structured JSON with spatial grid mapping, player standardization, and confidence metrics.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
