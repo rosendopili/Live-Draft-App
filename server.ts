@@ -55,8 +55,6 @@ app.post('/api/ocr', async (req, res) => {
         role: 'user',
         parts: [
           { inlineData: { mimeType, data: base64Data } },
-          { text: systemPrompt + '
-' + promptText }
         ]
       }],
       generationConfig: {
@@ -144,4 +142,4 @@ async function startServer() {
   if (!process.env.VERCEL) app.listen(PORT);
 }
 startServer();
-export default app;
+export default a
