@@ -17,7 +17,7 @@ import { NFLPlayer } from './data/nflPlayers';
 import { Sparkles, Layers, ArrowLeft } from 'lucide-react';
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState<'board' | 'available' | 'rosters' | 'json' | 'samples'>('board');
+  const [activeTab, setActiveTab] = useState<'board' | 'available' | 'rosters' | 'json' | 'samples'>('samples');
   const [hasApiKey, setHasApiKey] = useState<boolean>(true);
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
@@ -29,18 +29,18 @@ export default function App() {
     scoring_format: 'PPR',
     my_team_column: 4,
     team_names: {
-      1: 'Nikko',
-      2: 'Jay',
-      3: 'Nate',
-      4: 'Peewee',
-      5: 'Bo',
-      6: 'Carlo',
-      7: 'Jon',
-      8: 'Jaime',
-      9: 'Ro',
-      10: 'Dave',
-      11: 'John',
-      12: 'Ariel',
+      1: 'Team 1',
+      2: 'Team 2',
+      3: 'Team 3',
+      4: 'Team 4',
+      5: 'Team 5',
+      6: 'Team 6',
+      7: 'Team 7',
+      8: 'Team 8',
+      9: 'Team 9',
+      10: 'Team 10',
+      11: 'Team 11',
+      12: 'Team 12',
     },
   });
 
@@ -52,9 +52,22 @@ export default function App() {
   const [manualDefaultRound, setManualDefaultRound] = useState<number>(1);
   const [manualDefaultCol, setManualDefaultCol] = useState<number>(1);
 
-  // Current active draft board data
-  const [ocrResult, setOcrResult] = useState<OCRResult>(SAMPLE_BOARDS[0].picksData);
-  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | undefined>(SAMPLE_BOARDS[0].thumbnailUrl);
+  // Current active draft board data (Initialize empty)
+  const [ocrResult, setOcrResult] = useState<OCRResult>({
+    draft_info: {
+      league_name: 'My Draft',
+      total_teams: 12,
+      total_rounds: 16,
+      teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: `Team ${i + 1}` })),
+    },
+    picks: [],
+    summary: {
+      total_detected: 0,
+      avg_confidence: 1.0,
+      processing_time_ms: 0,
+    },
+  });
+  const [imagePreviewUrl, setImagePreviewUrl] = useState<string | undefined>(undefined);
 
   // Reset Board / Start New Draft handler
   const handleConfirmReset = () => {

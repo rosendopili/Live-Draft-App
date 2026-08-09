@@ -293,9 +293,10 @@ Instructions:
   }
 });
 
+// ... existing code ...
 async function startServer() {
   // Vite middleware for dev or static serve for prod
-  if (process.env.NODE_ENV !== 'production') {
+  if (process.env.NODE_ENV !== 'production' && !process.env.VERCEL) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',
@@ -304,14 +305,20 @@ async function startServer() {
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
-    });
+    // Important: we don't handle the wildcard * here for Vercel, 
+    // because vercel.json handles the routing.
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`[DraftBoard OCR Vision Server] Running on http://0.0.0.0:${PORT}`);
-  });
+  // Only start the listening server if we are not on Vercel
+  if (!process.env.VERCEL) {
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`[DraftBoard OCR Vision Server] Running on http://0.0.0.0:${PORT}`);
+    });
+  }
 }
 
 startServer();
+
+// Export the app for Vercel
+export default app;
+
