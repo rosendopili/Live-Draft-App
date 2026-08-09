@@ -12,10 +12,16 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
     const response = await fetch(SLEEPER_PLAYERS_URL);
     const data = await response.json();
 
+    // 1. Filter out non-active, non-rostered, or retired players
+    // 2. Sort by search_rank to get the "Most Relevant" players first
     const players: NFLPlayer[] = Object.values(data)
       .filter((p: any) => 
-        p.active && 
-        p.team && // Must be on an active NFL roster
+        p.active === true && 
+        p.team !== null && 
+        p.team !== undefined &&
+        p.team !== "" &&
+        p.search_rank !== null && 
+        p.search_rank > 0 &&
         ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.position)
       )
       .map((p: any) => ({
@@ -23,16 +29,18 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
         name: `${p.first_name} ${p.last_name}`,
         position: (p.position === 'DEF' ? 'DST' : p.position) as Position,
         nflTeam: p.team,
-        adp: 999,
-        tier: 5,
-        rank: 999,
-        positionRank: `${p.position}0`,
+        adp: p.search_rank || 999,
+        tier: p.search_rank < 50 ? 1 : p.search_rank < 100 ? 2 : p.search_rank < 150 ? 3 : 4,
+        rank: p.search_rank || 999,
+        positionRank: `${p.position}${p.depth_chart_order || ''}`,
         byeWeek: p.search_rank || 0,
         projectedPtsPPR: 0,
         tags: [p.status],
-        notes: `Age: ${p.age || 'N/A'}`,
+        notes: `Team: ${p.team}`,
         injuryStatus: p.injury_status
-      }));
+      }))
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 300); // We only want the Top 300 active players to avoid "all over the place" results
 
     localStorage.setItem('sleeper_players_cache', JSON.stringify(players));
     localStorage.setItem('sleeper_cache_timestamp', Date.now().toString());
