@@ -22,7 +22,7 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
         adp: 999,
         tier: 5,
         rank: 999,
-        positionRank: \`\${p.position}0\`,
+        positionRank: `${p.position}0`,
         byeWeek: p.search_rank || 0,
         projectedPtsPPR: 0,
         tags: [p.status],

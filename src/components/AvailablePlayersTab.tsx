@@ -22,7 +22,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
   const [aiError, setAiError] = useState<string | null>(null);
 
   const myCol = settings.my_team_column || 1;
-  const myTeamName = settings.team_names[myCol] || \`Team \${myCol}\`;
+  const myTeamName = settings.team_names[myCol] || `Team ${myCol}`;
 
   const draftedSet = useMemo(() => new Set(data.picks.map(p => p.player_name.toLowerCase())), [data.picks]);
   const availablePlayers = useMemo(() => {
@@ -41,9 +41,9 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
     if (!isMyTurn) return;
     setIsAiLoading(true); setAiError(null); setAiAnalysis(null);
     try {
-      const myRoster = data.picks.filter(p => p.team_column === myCol).map(p => \`\${p.player_name} (\${p.position})\`);
-      const topAvail = availablePlayers.slice(0, 15).map(p => \`\${p.name} (\${p.position}, Rank: \${p.rank}\${p.injuryStatus ? ', INJURED: ' + p.injuryStatus : ''})\`);
-      const prompt = \`Expert advice for \${myTeamName} (slot \${myCol}). Format: \${settings.scoring_format}. Roster: \${myRoster.join(', ') || 'Empty'}. Available: \${topAvail.join(', ')}. Give 3-4 concise strategic bullet points.\`;
+      const myRoster = data.picks.filter(p => p.team_column === myCol).map(p => `${p.player_name} (${p.position})`);
+      const topAvail = availablePlayers.slice(0, 15).map(p => `${p.name} (${p.position}, Rank: ${p.rank}${p.injuryStatus ? ', INJURED: ' + p.injuryStatus : ''})`);
+      const prompt = `Expert advice for ${myTeamName} (slot ${myCol}). Format: ${settings.scoring_format}. Roster: ${myRoster.join(', ') || 'Empty'}. Available: ${topAvail.join(', ')}. Give 3-4 concise strategic bullet points.`;
       const res = await fetch('/api/recommend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Server error');
@@ -78,7 +78,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex flex-wrap gap-1.5 flex-1">
             {POSITIONS.map(pos => (
-              <button key={pos} onClick={() => setSelectedPos(pos)} className={\`px-4 py-2 rounded-xl text-xs font-black border transition-all \${selectedPos === pos ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}\`}>{pos}</button>
+              <button key={pos} onClick={() => setSelectedPos(pos)} className={`px-4 py-2 rounded-xl text-xs font-black border transition-all ${selectedPos === pos ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400 hover:bg-slate-700'}`}>{pos}</button>
             ))}
           </div>
           <div className="relative lg:w-80">
@@ -90,7 +90,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
           {availablePlayers.slice(0, 100).map(p => (
             <div key={p.id} className="p-4 bg-slate-950/40 border border-slate-800 rounded-2xl flex items-center justify-between group hover:border-emerald-500/30 transition-all">
               <div className="flex items-center gap-4">
-                <div className={\`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] \${p.position === 'QB' ? 'bg-red-500/10 text-red-500' : p.position === 'RB' ? 'bg-blue-500/10 text-blue-500' : p.position === 'WR' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}\`}>{p.position}</div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${p.position === 'QB' ? 'bg-red-500/10 text-red-500' : p.position === 'RB' ? 'bg-blue-500/10 text-blue-500' : p.position === 'WR' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>{p.position}</div>
                 <div>
                   <div className="flex items-center gap-2">
                     <div className="font-bold text-sm text-slate-100">{p.name}</div>
