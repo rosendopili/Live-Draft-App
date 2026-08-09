@@ -21,7 +21,7 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('board')}>
               <div className="bg-stone-800 p-1 rounded-lg border border-stone-700 shadow-inner">
                 <img 
-                  src="/assets/logo.png" 
+                  src="/logo.png" 
                   alt="Leatherheads Logo" 
                   className="w-8 h-8 object-contain"
                   onError={(e) => {
