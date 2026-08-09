@@ -1,13 +1,11 @@
 import React from 'react';
-import { Layout, Users, Sparkles, Settings, PlusCircle, RotateCcw, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Layout, Users, Sparkles, PlusCircle, RotateCcw, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 interface HeaderProps {
   hasApiKey: boolean;
-  activeTab: 'board' | 'available' | 'rosters' | 'settings';
-  setActiveTab: (tab: 'board' | 'available' | 'rosters' | 'settings') => void;
+  activeTab: 'board' | 'available' | 'rosters';
+  setActiveTab: (tab: 'board' | 'available' | 'rosters') => void;
   detectedCount: number;
-  onNewScan: () => void;
-  onOpenSettings: () => void;
   onOpenManualPick: () => void;
   onStartNewDraft: () => void;
 }
@@ -16,7 +14,6 @@ export const Header: React.FC<HeaderProps> = ({
   hasApiKey,
   activeTab,
   setActiveTab,
-  detectedCount,
   onOpenManualPick,
   onStartNewDraft,
 }) => {
@@ -36,7 +33,6 @@ export const Header: React.FC<HeaderProps> = ({
               { id: 'board', label: 'Draft Board', icon: Layout },
               { id: 'available', label: 'Available', icon: Sparkles },
               { id: 'rosters', label: 'Rosters', icon: Users },
-              { id: 'settings', label: 'AI Settings', icon: Settings },
             ].map((tab) => (
               <button
                 key={tab.id}
@@ -58,8 +54,8 @@ export const Header: React.FC<HeaderProps> = ({
               {hasApiKey ? <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> : <ShieldAlert className="w-3.5 h-3.5 text-amber-500" />}
               <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{hasApiKey ? 'AI Ready' : 'AI Offline'}</span>
             </div>
-            <button onClick={onOpenManualPick} className="p-2 text-slate-400 hover:text-white transition-colors"><PlusCircle className="w-5 h-5" /></button>
-            <button onClick={onStartNewDraft} className="p-2 text-slate-400 hover:text-red-400 transition-colors"><RotateCcw className="w-5 h-5" /></button>
+            <button onClick={onOpenManualPick} title="Manual Pick" className="p-2 text-slate-400 hover:text-white transition-colors"><PlusCircle className="w-5 h-5" /></button>
+            <button onClick={onStartNewDraft} title="Reset Draft" className="p-2 text-slate-400 hover:text-red-400 transition-colors"><RotateCcw className="w-5 h-5" /></button>
           </div>
         </div>
       </div>
