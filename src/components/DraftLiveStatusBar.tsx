@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { DraftSettings, OCRResult, NFLPlayer } from '../types';
-import { Clock, Flame, Sparkles, UserPlus } from 'lucide-react';
+import { Clock, CheckCircle2, Flame, Sparkles, UserPlus } from 'lucide-react';
 
 interface DraftLiveStatusBarProps {
   settings: DraftSettings;
@@ -42,27 +42,39 @@ export const DraftLiveStatusBar: React.FC<DraftLiveStatusBarProps> = ({ settings
       .map(p => {
         let score = 1000 - p.rank;
         const adpGap = p.adp - currentPick;
-        if (adpGap > 18) score -= (adpGap - 18) * 25; 
 
-        // 1. Dynamic Value based on roster depth
-        if (p.position === 'WR') score += (r.wr - 2) * 50;
-        if (p.position === 'RB') score += (r.rb - 2) * 50;
+        // 1. Strict ADP Guardrail: Massive penalty if ADP is more than 1 round away
+        if (adpGap > totalTeams) {
+            score -= (adpGap * 20); // Scale penalty with gap
+        }
+        if (adpGap > (totalTeams * 2)) {
+            score -= 2000; // Complete disqualification for players 2+ rounds away
+        }
 
-        // 2. Flex & Superflex Boosts
-        if (p.position === 'QB' && r.flex_super > 0) score += 200;
-        if (p.position === 'TE' && r.flex_wrbte > 0) score += 30;
+        // 2. Position Value Modifiers
+        if (p.position === 'WR') score += (r.wr - 2) * 15;
+        if (p.position === 'RB') score += (r.rb - 2) * 15;
 
-        // 3. Positional Needs Penalty
-        if (p.position === 'QB' && posCounts.QB >= (r.qb + r.flex_super)) score -= 500;
-        if (p.position === 'TE' && posCounts.TE >= (r.te + r.flex_wrbte)) score -= 300;
-        if (p.position === 'QB' && r.flex_super === 0 && currentPick < 30) score -= 400; // Standard devalue
+        // 3. Flex & Superflex (Minor Adjustments)
+        if (p.position === 'QB' && r.flex_super > 0) score += 100;
+        if (p.position === 'TE' && r.flex_wrbte > 0) score += 5; // Very minor TE boost for expanded flex
 
-        if (p.injuryStatus) score -= 400;
+        // 4. Positional Needs Penalty
+        if (p.position === 'QB' && posCounts.QB >= (r.qb + r.flex_super)) score -= 800;
+        if (p.position === 'TE' && posCounts.TE >= (r.te + r.flex_wrbte)) score -= 600;
+        
+        // 5. Early Round QB/TE Devaluation (Except Superflex)
+        if (currentPick < (totalTeams * 2)) {
+            if (p.position === 'QB' && r.flex_super === 0) score -= 500;
+            if (p.position === 'TE') score -= 300;
+        }
+
+        if (p.injuryStatus) score -= 500;
         return { ...p, score };
       })
       .sort((a, b) => b.score - a.score)
       .slice(0, 3);
-  }, [playerDatabase, data.picks, currentSlot.col, settings, currentPick]);
+  }, [playerDatabase, data.picks, currentSlot.col, settings, currentPick, totalTeams]);
 
   return (
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
@@ -89,7 +101,7 @@ export const DraftLiveStatusBar: React.FC<DraftLiveStatusBarProps> = ({ settings
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
           {activeRecs.map((p, i) => (
-            <button key={p.id} onClick={() => onQuickDraft(p, currentSlot.col, currentSlot.round)} className="flex items-center justify-between p-3 bg-slate-950/50 border border-slate-800 hover:border-emerald-500 rounded-xl transition-all group text-left">
+            <button key={p.id} onClick={() => onQuickDraft(p, currentSlot.col, currentSlot.round)} className="flex items-center justify-between p-3 bg-slate-950/50 border border-slate-800 hover:border-emerald-500/50 rounded-xl transition-all group text-left">
               <div className="flex items-center gap-3">
                 <span className="text-[10px] font-black opacity-30">#{i+1}</span>
                 <div><div className="text-xs font-bold text-white truncate max-w-[110px]">{p.name}</div><div className="text-[9px] font-bold text-slate-500 uppercase">{p.position} • {p.nflTeam}</div></div>

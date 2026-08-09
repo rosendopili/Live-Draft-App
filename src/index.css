@@ -1,1 +1,30 @@
 @import "tailwindcss";
+
+@theme {
+  --color-primary: #451a03; /* Deep Leather Brown */
+  --color-accent: #78350f;  /* Amber Brown */
+  --color-highlight: #d97706; /* Golden Amber */
+}
+
+body {
+  @apply bg-stone-950 text-stone-100 antialiased;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 5px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  @apply bg-stone-900;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  @apply bg-stone-700 rounded-full;
+}
+
+/* Override Emerald with Leatherheads Amber/Brown theme */
+.bg-emerald-600 { @apply bg-amber-700; }
+.hover\:bg-emerald-500:hover { @apply bg-amber-600; }
+.text-emerald-400 { @apply text-amber-500; }
+.border-emerald-500 { @apply border-amber-600; }
+.bg-emerald-500 { @apply bg-amber-600; }
