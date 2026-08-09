@@ -10,15 +10,40 @@ import { AvailablePlayersTab } from './components/AvailablePlayersTab';
 import { ManualPickModal } from './components/ManualPickModal';
 import { ResetConfirmModal } from './components/ResetConfirmModal';
 import { DraftPick, OCRResult, DraftSettings } from './types';
-import { NFLPlayer } from './data/nflPlayers';
+import { INITIAL_NFL_PLAYERS, NFLPlayer } from './data/nflPlayers';
+import { fetchSleeperPlayers } from './services/sleeperApi';
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<'board' | 'available' | 'rosters' | 'settings'>('board');
   const [userApiKey, setUserApiKey] = useState<string>(localStorage.getItem('gemini_api_key') || '');
+  const [playerDatabase, setPlayerDatabase] = useState<NFLPlayer[]>(INITIAL_NFL_PLAYERS);
   
   useEffect(() => {
     localStorage.setItem('gemini_api_key', userApiKey);
   }, [userApiKey]);
+
+  // Sync with Live Sleeper Data on mount
+  useEffect(() => {
+    async function syncPlayers() {
+      const livePlayers = await fetchSleeperPlayers();
+      if (livePlayers.length > 0) {
+        // Merge strategy: Keep our initial ranked players but update their team/status, 
+        // and add any new active players from Sleeper.
+        setPlayerDatabase(prev => {
+          const merged = [...prev];
+          const seenNames = new Set(prev.map(p => p.name.toLowerCase()));
+          
+          livePlayers.forEach(lp => {
+            if (!seenNames.has(lp.name.toLowerCase())) {
+              merged.push(lp);
+            }
+          });
+          return merged;
+        });
+      }
+    }
+    syncPlayers();
+  }, []);
 
   const [draftSettings, setDraftSettings] = useState<DraftSettings>({
     total_teams: 12, total_rounds: 16, draft_type: 'snake', scoring_format: 'PPR', my_team_column: 4,
@@ -69,7 +94,7 @@ export default function App() {
         )}
 
         {activeTab === 'board' && (
-          <div className="space-y-6">
+          <div className="space-y-6 animate-in fade-in duration-500">
             <DraftLiveStatusBar settings={draftSettings} data={ocrResult} onOpenUploadModal={() => setIsManualModalOpen(true)} onOpenSettingsModal={() => setIsSettingsModalOpen(true)} onResetBoard={() => setIsResetModalOpen(true)} />
             <SummaryStats data={ocrResult} />
             <DraftBoardGrid data={ocrResult} settings={draftSettings} onUpdatePick={handleUpdatePick} onAddPick={(r, c) => { setManualDefaultRound(r); setManualDefaultCol(c); setIsManualModalOpen(true); }} onEditPickClick={(p) => { setEditingPick(p); setIsEditModalOpen(true); }} />
@@ -77,9 +102,13 @@ export default function App() {
         )}
 
         {activeTab === 'available' && (
-          <AvailablePlayersTab data={ocrResult} settings={draftSettings} onQuickDraftPlayer={(player, col, round) => {
-            handleUpdatePick({ round, pick_in_round: col, overall_pick: ((round-1)*draftSettings.total_teams+col), team_column: col, team_name: draftSettings.team_names[col], player_name: player.name, position: player.position, nfl_team: player.nflTeam, raw_text: '', confidence: 1, status: 'confirmed' });
-          }} apiKey={userApiKey} />
+          <AvailablePlayersTab 
+            data={ocrResult} 
+            settings={draftSettings} 
+            playerDatabase={playerDatabase}
+            onQuickDraftPlayer={(player, col, round) => {
+              handleUpdatePick({ round, pick_in_round: col, overall_pick: ((round-1)*draftSettings.total_teams+col), team_column: col, team_name: draftSettings.team_names[col], player_name: player.name, position: player.position, nfl_team: player.nflTeam, raw_text: '', confidence: 1, status: 'confirmed' });
+            }} apiKey={userApiKey} />
         )}
 
         {activeTab === 'rosters' && <TeamRostersTab data={ocrResult} settings={draftSettings} onEditPickClick={(p) => { setEditingPick(p); setIsEditModalOpen(true); }} />}
