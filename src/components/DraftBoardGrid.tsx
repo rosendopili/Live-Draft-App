@@ -1,7 +1,7 @@
 import React, { useState, useMemo } from 'react';
 import { DraftPick, OCRResult, DraftSettings } from '../types';
 import { PositionBadge } from './PositionBadge';
-import { Search, Plus, X } from 'lucide-react';
+import { Plus, X } from 'lucide-react';
 
 interface DraftBoardGridProps {
   data: OCRResult;
@@ -14,8 +14,6 @@ interface DraftBoardGridProps {
 export const DraftBoardGrid: React.FC<DraftBoardGridProps> = ({
   data, settings, onAddPick, onEditPickClick,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [selectedPosition, setSelectedPosition] = useState<string>('ALL');
   const [focusedRound, setFocusedRound] = useState<number | null>(null);
 
   const totalTeams = settings?.total_teams || 12;
@@ -28,32 +26,12 @@ export const DraftBoardGrid: React.FC<DraftBoardGridProps> = ({
     return map;
   }, [data.picks]);
 
-  const filteredPicks = useMemo(() => {
-    return data.picks.filter((p) => {
-      const matchesSearch = p.player_name.toLowerCase().includes(searchQuery.toLowerCase()) || p.nfl_team.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesPos = selectedPosition === 'ALL' || p.position === selectedPosition;
-      return matchesSearch && matchesPos;
-    });
-  }, [data.picks, searchQuery, selectedPosition]);
-
   return (
     <div className="space-y-6">
-      <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row gap-4">
-        <div className="relative flex-1">
-          <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
-          <input type="text" placeholder="Search players..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-xs text-white focus:border-emerald-500 outline-none" />
-        </div>
-        <div className="flex gap-1 overflow-x-auto pb-2 md:pb-0">
-          {['ALL', 'QB', 'RB', 'WR', 'TE', 'K', 'DST'].map((pos) => (
-            <button key={pos} onClick={() => setSelectedPosition(pos)} className={`px-3 py-1.5 rounded-lg text-[10px] font-black border transition ${selectedPosition === pos ? 'bg-emerald-600 border-emerald-500 text-white' : 'bg-slate-800 border-slate-700 text-slate-400'}`}>{pos}</button>
-          ))}
-        </div>
-      </div>
-
       {focusedRound ? (
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl animate-in zoom-in duration-200">
           <div className="flex items-center justify-between mb-6">
-            <h3 className="text-xl font-black text-white">ROUND {focusedRound}</h3>
+            <h3 className="text-xl font-black text-white uppercase tracking-tighter">ROUND {focusedRound}</h3>
             <button onClick={() => setFocusedRound(null)} className="p-2 bg-slate-800 hover:bg-slate-700 rounded-full text-slate-400 hover:text-white transition"><X className="w-5 h-5" /></button>
           </div>
           <div className="space-y-3">
@@ -64,7 +42,7 @@ export const DraftBoardGrid: React.FC<DraftBoardGridProps> = ({
               return (
                 <div key={col} className={`flex items-center justify-between p-4 rounded-2xl border ${col === myTeamCol ? 'bg-emerald-950/20 border-emerald-500/40' : 'bg-slate-950/50 border-slate-800'}`}>
                   <div className="flex flex-col">
-                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Pick {col}</span>
+                    <span className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Slot {col}</span>
                     <span className={`font-bold ${col === myTeamCol ? 'text-emerald-400' : 'text-slate-300'}`}>{teamName}</span>
                   </div>
                   <div className="flex-1 text-right pr-4">
@@ -74,7 +52,7 @@ export const DraftBoardGrid: React.FC<DraftBoardGridProps> = ({
                         <PositionBadge position={pick.position} size="sm" />
                       </div>
                     ) : (
-                      <button onClick={() => onAddPick(focusedRound, col)} className="text-xs font-bold text-slate-600 hover:text-emerald-400 transition flex items-center gap-1 ml-auto">Empty <Plus className="w-3 h-3"/></button>
+                      <button onClick={() => onAddPick(focusedRound, col)} className="text-xs font-bold text-slate-600 hover:text-emerald-400 transition flex items-center gap-1 ml-auto">EMPTY <Plus className="w-3 h-3"/></button>
                     )}
                   </div>
                 </div>
@@ -99,11 +77,10 @@ export const DraftBoardGrid: React.FC<DraftBoardGridProps> = ({
                   <td onClick={() => setFocusedRound(r + 1)} className="p-2 text-center font-black text-xs text-emerald-500 cursor-pointer hover:bg-emerald-500/10 transition-colors rounded-lg">R{r + 1}</td>
                   {Array.from({ length: totalTeams }, (_, c) => {
                     const pick = pickMap.get(`${r + 1}-${c + 1}`);
-                    const isFiltered = pick && filteredPicks.includes(pick);
                     return (
                       <td key={c} className={`p-1 min-w-[120px] ${c + 1 === myTeamCol ? 'bg-emerald-500/5' : ''}`}>
                         {pick ? (
-                          <div onClick={() => onEditPickClick(pick)} className={`p-2 rounded-xl border transition-all cursor-pointer ${!isFiltered && (searchQuery || selectedPosition !== 'ALL') ? 'opacity-20 grayscale' : 'opacity-100'} bg-slate-800/50 border-slate-700 hover:border-emerald-500/50`}>
+                          <div onClick={() => onEditPickClick(pick)} className="p-2 rounded-xl border transition-all cursor-pointer bg-slate-800/50 border-slate-700 hover:border-emerald-500/50">
                             <div className="flex justify-between items-start mb-1">
                               <span className="text-[8px] font-black text-slate-500">#{pick.overall_pick}</span>
                               <PositionBadge position={pick.position} size="xs" />
