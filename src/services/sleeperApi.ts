@@ -2,25 +2,24 @@ import { NFLPlayer } from '../data/nflPlayers';
 import { Position } from '../types';
 
 const SLEEPER_PLAYERS_URL = 'https://api.sleeper.app/v1/players/nfl';
+const CACHE_VERSION = 'v2_top300'; // Change this to force cache refresh
 
 export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
   try {
-    const cached = localStorage.getItem('sleeper_players_cache');
-    const cacheTime = localStorage.getItem('sleeper_cache_timestamp');
-    if (cached && cacheTime && (Date.now() - parseInt(cacheTime) < 86400000)) return JSON.parse(cached);
+    const cached = localStorage.getItem(`sleeper_players_cache_${CACHE_VERSION}`);
+    const cacheTime = localStorage.getItem(`sleeper_cache_timestamp_${CACHE_VERSION}`);
+    
+    if (cached && cacheTime && (Date.now() - parseInt(cacheTime) < 86400000)) {
+      return JSON.parse(cached);
+    }
 
     const response = await fetch(SLEEPER_PLAYERS_URL);
     const data = await response.json();
 
-    // 1. Filter out non-active, non-rostered, or retired players
-    // 2. Sort by search_rank to get the "Most Relevant" players first
     const players: NFLPlayer[] = Object.values(data)
       .filter((p: any) => 
         p.active === true && 
-        p.team !== null && 
-        p.team !== undefined &&
-        p.team !== "" &&
-        p.search_rank !== null && 
+        p.team && 
         p.search_rank > 0 &&
         ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.position)
       )
@@ -40,10 +39,11 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
         injuryStatus: p.injury_status
       }))
       .sort((a, b) => a.rank - b.rank)
-      .slice(0, 300); // We only want the Top 300 active players to avoid "all over the place" results
+      .slice(0, 300);
 
-    localStorage.setItem('sleeper_players_cache', JSON.stringify(players));
-    localStorage.setItem('sleeper_cache_timestamp', Date.now().toString());
+    localStorage.setItem(`sleeper_players_cache_${CACHE_VERSION}`, JSON.stringify(players));
+    localStorage.setItem(`sleeper_cache_timestamp_${CACHE_VERSION}`, Date.now().toString());
+    
     return players;
   } catch (error) {
     console.error('Error fetching Sleeper players:', error);
