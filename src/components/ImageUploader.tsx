@@ -143,9 +143,7 @@ ${customInstructions ? `User Context: ${customInstructions}` : ''}`;
           role: 'user',
           parts: [
             { inlineData: { mimeType, data: base64Data } },
-            { text: systemPrompt + '
-
-Analyze this draft board and extract all stickers.' }
+            { text: systemPrompt + '\n\nAnalyze this draft board and extract all stickers.' }
           ]
         }]
       });
