@@ -177,52 +177,39 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
       .map((item) => item.player);
   }, [draftedSet, posCounts, myPicks.length, settings.scoring_format, settings.roster_settings]);
 
-  // Live Gemini AI Strategy Recommendation Request
+// Live Gemini AI Strategy Recommendation Request (Client-Side)
   const handleFetchAiRecommendation = async () => {
     setIsAiLoading(true);
     setAiError(null);
     setAiAnalysis(null);
 
     try {
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) throw new Error('VITE_GEMINI_API_KEY is missing from Vercel settings.');
+
+      const genAI = new GoogleGenAI(apiKey);
+      const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+
       const topAvailableSummary = availablePlayers.slice(0, 15).map((p) => ({
-        name: p.name,
-        position: p.position,
-        nflTeam: p.nflTeam,
-        rank: p.rank,
-        adp: p.adp,
-        tier: p.tier,
+        name: p.name, pos: p.position, team: p.nflTeam, rank: p.rank, tier: p.tier
       }));
 
       const myRosterSummary = myPicks.map((p) => ({
-        round: p.round,
-        name: p.player_name,
-        pos: p.position,
-        team: p.nfl_team,
+        round: p.round, name: p.player_name, pos: p.position
       }));
 
-      const res = await fetch('/api/recommend', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          myTeamColumn: myCol,
-          myTeamName,
-          scoringFormat: settings.scoring_format,
-          draftType: settings.draft_type,
-          currentClockPick: currentClockOverall,
-          isMyTurn,
-          roster: myRosterSummary,
-          posCounts,
-          topAvailable: topAvailableSummary,
-          rosterSettings: settings.roster_settings,
-        }),
-      });
+      const prompt = `
+You are an elite fantasy football draft expert. Provide advice for ${myTeamName}.
+League Settings: ${settings.scoring_format || 'PPR'}, ${settings.draft_type}.
+Current State: Pick #${currentClockOverall} overall. ${isMyTurn ? 'THE MANAGER IS ON THE CLOCK.' : 'Waiting.'}
+Roster So Far: ${JSON.stringify(myRosterSummary)}
+Top Available: ${JSON.stringify(topAvailableSummary)}
+Provide 3-5 bullet points of advice on who to pick next and why. Keep it concise.
+`;
 
-      if (!res.ok) {
-        throw new Error('Failed to fetch AI recommendation from server.');
-      }
-
-      const json = await res.json();
-      setAiAnalysis(json.recommendation);
+      const result = await model.generateContent(prompt);
+      const response = await result.response;
+      setAiAnalysis(response.text() || 'No recommendation available.');
     } catch (err: any) {
       setAiError(err.message || 'Error generating AI strategy.');
     } finally {
