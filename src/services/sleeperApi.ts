@@ -13,21 +13,25 @@ export async function fetchSleeperPlayers(): Promise<NFLPlayer[]> {
     const data = await response.json();
 
     const players: NFLPlayer[] = Object.values(data)
-      .filter((p: any) => p.active && ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.position))
+      .filter((p: any) => 
+        p.active && 
+        p.team && // Must be on an active NFL roster
+        ['QB', 'RB', 'WR', 'TE', 'K', 'DEF'].includes(p.position)
+      )
       .map((p: any) => ({
         id: p.player_id,
-        name: `${p.first_name} ${p.last_name}`,
+        name: \`\${p.first_name} \${p.last_name}\`,
         position: (p.position === 'DEF' ? 'DST' : p.position) as Position,
-        nflTeam: p.team || 'FA',
+        nflTeam: p.team,
         adp: 999,
         tier: 5,
         rank: 999,
-        positionRank: `${p.position}0`,
+        positionRank: \`\${p.position}0\`,
         byeWeek: p.search_rank || 0,
         projectedPtsPPR: 0,
         tags: [p.status],
-        notes: `Age: ${p.age || 'N/A'}`,
-        injuryStatus: p.injury_status // "Questionable", "Doubtful", "IR", etc.
+        notes: \`Age: \${p.age || 'N/A'}\`,
+        injuryStatus: p.injury_status
       }));
 
     localStorage.setItem('sleeper_players_cache', JSON.stringify(players));

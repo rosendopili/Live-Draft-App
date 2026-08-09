@@ -26,21 +26,28 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
 
   const draftedSet = useMemo(() => new Set(data.picks.map(p => p.player_name.toLowerCase())), [data.picks]);
   
-  // Base available players filtered by search/pos
+  // Base available players filtered by search/pos + MUST BE ON A TEAM
   const filteredPlayers = useMemo(() => {
     return playerDatabase
-      .filter(p => !draftedSet.has(p.name.toLowerCase()) && (selectedPos === 'ALL' || p.position === selectedPos) && (p.name.toLowerCase().includes(searchQuery.toLowerCase())))
+      .filter(p => 
+        !draftedSet.has(p.name.toLowerCase()) && 
+        p.nflTeam && p.nflTeam !== 'FA' && // Strict roster check
+        (selectedPos === 'ALL' || p.position === selectedPos) && 
+        (p.name.toLowerCase().includes(searchQuery.toLowerCase()))
+      )
       .sort((a, b) => a.rank - b.rank);
   }, [draftedSet, selectedPos, searchQuery, playerDatabase]);
 
   // Logic to find Top 3 Recommendations for the ACTIVE USER
   const smartRecommendations = useMemo(() => {
-    const unpicked = playerDatabase.filter(p => !draftedSet.has(p.name.toLowerCase())).sort((a, b) => a.rank - b.rank);
+    const unpicked = playerDatabase
+      .filter(p => !draftedSet.has(p.name.toLowerCase()) && p.nflTeam && p.nflTeam !== 'FA')
+      .sort((a, b) => a.rank - b.rank);
+    
     const myRoster = data.picks.filter(p => p.team_column === myCol);
     const myPosCounts = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
     myRoster.forEach(p => { if (myPosCounts[p.position] !== undefined) myPosCounts[p.position]++; });
 
-    // Heuristic: Weight positions based on current roster
     return unpicked
       .map(p => {
         let score = 1000 - p.rank;
@@ -62,8 +69,14 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
     setIsAiLoading(true); setAiError(null); setAiAnalysis(null);
     try {
       const myRoster = data.picks.filter(p => p.team_column === myCol).map(p => `${p.player_name} (${p.position})`);
-      const topAvail = filteredPlayers.slice(0, 15).map(p => `${p.name} (${p.position}, Rank: ${p.rank})`);
-      const prompt = `Expert advice for ${myTeamName} (slot ${myCol}). League: ${settings.scoring_format}. My Roster: ${myRoster.join(', ') || 'Empty'}. Top Available: ${topAvail.join(', ')}. Give 3 concise strategy tips for my upcoming pick.`;
+      const topAvail = smartRecommendations.map(p => `${p.name} (${p.position}, Team: ${p.nflTeam}, Rank: ${p.rank})`);
+      
+      const prompt = `Expert advice for ${myTeamName} (slot ${myCol}) for the 2026-27 season. 
+      Only consider players currently on an NFL roster (not Free Agents).
+      My Roster: ${myRoster.join(', ') || 'Empty'}. 
+      Top Available (Strictly Roster-Only): ${topAvail.join(', ')}. 
+      Provide strategic advice for my upcoming pick.`;
+
       const res = await fetch('/api/recommend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Server error');
@@ -73,19 +86,19 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Top Section: Smart Recommendations for the USER */}
+      {/* Smart Recommendations Section */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-600/20 p-2 rounded-xl text-emerald-400"><User className="w-5 h-5"/></div>
             <div>
-              <h2 className="text-lg font-bold text-white uppercase tracking-tight">Top Targets for {myTeamName}</h2>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Personalized based on slot {myCol} and roster needs</p>
+              <h2 className="text-lg font-bold text-white uppercase tracking-tight">Active Roster Targets</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Only displaying players currently on an NFL team for the 2026-27 season</p>
             </div>
           </div>
           <button onClick={handleFetchAiRecommendation} disabled={isAiLoading} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg shadow-emerald-900/20">
             {isAiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Ask Gemini Advisor
+            Analyze Strategy
           </button>
         </div>
 
@@ -100,15 +113,15 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
                 <div className="font-black text-slate-100 truncate">{p.name}</div>
                 <div className="text-[10px] font-bold text-slate-500 uppercase">{p.nflTeam} • Rank #{p.rank}</div>
               </div>
-              <button onClick={() => onQuickDraftPlayer(p, currentCol, currentRound)} className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1.5"><UserPlus className="w-3 h-3"/> DRAFT NOW</button>
+              <button onClick={() => onQuickDraftPlayer(p, currentCol, currentRound)} className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1.5"><UserPlus className="w-3 h-3"/> DRAFT</button>
             </div>
           ))}
         </div>
 
-        {aiAnalysis && <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-xl p-4 text-xs leading-relaxed text-emerald-100 font-medium whitespace-pre-line shadow-inner mt-2">{aiAnalysis}</div>}
+        {aiAnalysis && <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-xl p-4 text-xs leading-relaxed text-emerald-100 font-medium whitespace-pre-line mt-2">{aiAnalysis}</div>}
       </div>
 
-      {/* Main Player Database */}
+      {/* Database View */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex flex-wrap gap-1.5 flex-1">
@@ -118,7 +131,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
           </div>
           <div className="relative lg:w-80">
             <Search className="w-4 h-4 absolute left-3.5 top-3 text-slate-500" />
-            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search live database..." className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors" />
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search live rosters..." className="w-full bg-slate-800 border border-slate-700 rounded-xl pl-10 pr-4 py-2.5 text-xs text-white outline-none focus:border-emerald-500 transition-colors" />
           </div>
         </div>
         
