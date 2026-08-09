@@ -68,15 +68,15 @@ export const DraftLiveStatusBar: React.FC<DraftLiveStatusBarProps> = ({ settings
     <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 shadow-xl space-y-4">
       <div className="flex items-center justify-between border-b border-slate-800 pb-4">
         <div className="flex items-center gap-3">
-          <div className={`w-12 h-12 rounded-xl flex items-center justify-center \${isMyTurn ? 'bg-emerald-500 text-black animate-pulse' : 'bg-slate-800 text-emerald-400'}`}>
+          <div className={`w-12 h-12 rounded-xl flex items-center justify-center ${isMyTurn ? 'bg-emerald-500 text-black animate-pulse' : 'bg-slate-800 text-emerald-400'}`}>
             {isMyTurn ? <Flame className="w-6 h-6 fill-current" /> : <Clock className="w-6 h-6" />}
           </div>
           <div>
             <p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">{settings.scoring_format} • {settings.total_teams} Teams</p>
-            <h2 className="text-xl font-black text-white leading-tight">{isMyTurn ? 'YOUR TURN' : \`Pick #\${currentPick}: \${settings.team_names[currentSlot.col]}\`}</h2>
+            <h2 className="text-xl font-black text-white leading-tight">{isMyTurn ? 'YOUR TURN' : `Pick #${currentPick}: ${settings.team_names[currentSlot.col]}`}</h2>
           </div>
         </div>
-        <div className={\`flex flex-col items-end \${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}\`}>
+        <div className={`flex flex-col items-end ${timeLeft < 10 ? 'text-red-500 animate-pulse' : 'text-emerald-400'}`}>
           <span className="text-[10px] font-black uppercase opacity-60">Time</span>
           <span className="text-2xl font-mono font-black">{Math.floor(timeLeft / 60)}:{(timeLeft % 60).toString().padStart(2, '0')}</span>
         </div>
