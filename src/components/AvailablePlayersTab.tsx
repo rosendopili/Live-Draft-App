@@ -24,59 +24,89 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
   const myCol = settings.my_team_column || 1;
   const myTeamName = settings.team_names[myCol] || `Team ${myCol}`;
 
+  const currentPick = data.picks.length + 1;
+  const currentRound = Math.ceil(currentPick / settings.total_teams);
+  const pickInRound = ((currentPick - 1) % settings.total_teams) + 1;
+  const currentCol = (settings.draft_type === 'snake' && currentRound % 2 === 0) ? settings.total_teams - pickInRound + 1 : pickInRound;
+
   const draftedSet = useMemo(() => new Set(data.picks.map(p => p.player_name.toLowerCase())), [data.picks]);
   
-  // Base available players filtered by search/pos + MUST BE ON A TEAM
+  // Scoring logic helper to be used in recommendations
+  const calculatePlayerScore = (p: NFLPlayer, drafted: Set<string>, myRoster: any[], currentP: number, scoringFormat: string) => {
+    if (drafted.has(p.name.toLowerCase())) return -10000;
+    
+    let score = 1000 - p.rank;
+    
+    // 1. ADP Reach Penalty: Prevent recommending players way too early
+    // If a player's ADP is more than 1.5 rounds (18 picks) after current pick, penalize heavily
+    const adpGap = p.adp - currentP;
+    if (adpGap > 18) {
+      score -= (adpGap - 18) * 15;
+    }
+
+    // 2. Positional Scarcity & Value
+    const isSuperflex = scoringFormat === '2QB / Superflex';
+    const qbCount = myRoster.filter(r => r.position === 'QB').length;
+    const teCount = myRoster.filter(r => r.position === 'TE').length;
+    const rbCount = myRoster.filter(r => r.position === 'RB').length;
+    const wrCount = myRoster.filter(r => r.position === 'WR').length;
+
+    if (p.position === 'QB') {
+      if (!isSuperflex) {
+        score *= 0.8; // Lower baseline value for QB in 1QB leagues
+        if (qbCount >= 1) score -= 400; // Drastic penalty for 2nd QB
+      } else {
+        if (qbCount >= 2) score -= 300;
+      }
+    }
+
+    if (p.position === 'TE') {
+      score *= 0.9;
+      if (teCount >= 1) score -= 300;
+    }
+
+    if (p.position === 'RB') {
+      if (rbCount >= 3) score *= 0.9;
+    }
+
+    if (p.position === 'WR') {
+      if (wrCount >= 4) score *= 0.9;
+    }
+
+    // 3. Injury Penalty
+    if (p.injuryStatus) {
+      score -= 200;
+    }
+
+    return score;
+  };
+
+  const smartRecommendations = useMemo(() => {
+    const myRoster = data.picks.filter(p => p.team_column === myCol);
+    return playerDatabase
+      .filter(p => !draftedSet.has(p.name.toLowerCase()) && p.nflTeam && p.nflTeam !== 'FA')
+      .map(p => ({ ...p, calculatedScore: calculatePlayerScore(p, draftedSet, myRoster, currentPick, settings.scoring_format) }))
+      .sort((a, b) => b.calculatedScore - a.calculatedScore)
+      .slice(0, 3);
+  }, [playerDatabase, draftedSet, data.picks, myCol, currentPick, settings.scoring_format]);
+
   const filteredPlayers = useMemo(() => {
     return playerDatabase
       .filter(p => 
         !draftedSet.has(p.name.toLowerCase()) && 
-        p.nflTeam && p.nflTeam !== 'FA' && // Strict roster check
+        p.nflTeam && p.nflTeam !== 'FA' && 
         (selectedPos === 'ALL' || p.position === selectedPos) && 
         (p.name.toLowerCase().includes(searchQuery.toLowerCase()))
       )
       .sort((a, b) => a.rank - b.rank);
   }, [draftedSet, selectedPos, searchQuery, playerDatabase]);
 
-  // Logic to find Top 3 Recommendations for the ACTIVE USER
-  const smartRecommendations = useMemo(() => {
-    const unpicked = playerDatabase
-      .filter(p => !draftedSet.has(p.name.toLowerCase()) && p.nflTeam && p.nflTeam !== 'FA')
-      .sort((a, b) => a.rank - b.rank);
-    
-    const myRoster = data.picks.filter(p => p.team_column === myCol);
-    const myPosCounts = { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 };
-    myRoster.forEach(p => { if (myPosCounts[p.position] !== undefined) myPosCounts[p.position]++; });
-
-    return unpicked
-      .map(p => {
-        let score = 1000 - p.rank;
-        if (p.position === 'QB' && myPosCounts.QB >= 1) score -= 100;
-        if (p.position === 'TE' && myPosCounts.TE >= 1) score -= 50;
-        if (p.injuryStatus) score -= 200;
-        return { ...p, score };
-      })
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 3);
-  }, [playerDatabase, draftedSet, data.picks, myCol]);
-
-  const currentPick = data.picks.length + 1;
-  const currentRound = Math.ceil(currentPick / settings.total_teams);
-  const pickInRound = ((currentPick - 1) % settings.total_teams) + 1;
-  const currentCol = (settings.draft_type === 'snake' && currentRound % 2 === 0) ? settings.total_teams - pickInRound + 1 : pickInRound;
-
   const handleFetchAiRecommendation = async () => {
     setIsAiLoading(true); setAiError(null); setAiAnalysis(null);
     try {
       const myRoster = data.picks.filter(p => p.team_column === myCol).map(p => `${p.player_name} (${p.position})`);
-      const topAvail = smartRecommendations.map(p => `${p.name} (${p.position}, Team: ${p.nflTeam}, Rank: ${p.rank})`);
-      
-      const prompt = `Expert advice for ${myTeamName} (slot ${myCol}) for the 2026-27 season. 
-      Only consider players currently on an NFL roster (not Free Agents).
-      My Roster: ${myRoster.join(', ') || 'Empty'}. 
-      Top Available (Strictly Roster-Only): ${topAvail.join(', ')}. 
-      Provide strategic advice for my upcoming pick.`;
-
+      const topAvail = smartRecommendations.map(p => `${p.name} (${p.position}, Rank: ${p.rank}, ADP: ${p.adp})`);
+      const prompt = `Expert advice for ${myTeamName} (slot ${myCol}). League: ${settings.scoring_format}. My Roster: ${myRoster.join(', ') || 'Empty'}. Top Available (Ranked): ${topAvail.join(', ')}. Current overall pick: ${currentPick}. Account for ADP and positional value (QB/TE devalued vs high-premium RB/WR). Give 3 concise strategic bullet points.`;
       const res = await fetch('/api/recommend', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prompt }) });
       const json = await res.json();
       if (!res.ok) throw new Error(json.error || 'Server error');
@@ -86,19 +116,18 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Smart Recommendations Section */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl space-y-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
             <div className="bg-emerald-600/20 p-2 rounded-xl text-emerald-400"><User className="w-5 h-5"/></div>
             <div>
-              <h2 className="text-lg font-bold text-white uppercase tracking-tight">Active Roster Targets</h2>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Only displaying players currently on an NFL team for the 2026-27 season</p>
+              <h2 className="text-lg font-bold text-white uppercase tracking-tight">ADP-Informed Targets</h2>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Optimized for your roster needs and pick #{currentPick}</p>
             </div>
           </div>
-          <button onClick={handleFetchAiRecommendation} disabled={isAiLoading} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg shadow-emerald-900/20">
+          <button onClick={handleFetchAiRecommendation} disabled={isAiLoading} className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 rounded-xl text-xs font-black transition flex items-center gap-2 shadow-lg">
             {isAiLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-            Analyze Strategy
+            Ask Gemini Advisor
           </button>
         </div>
 
@@ -111,7 +140,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
               </div>
               <div className="mb-4">
                 <div className="font-black text-slate-100 truncate">{p.name}</div>
-                <div className="text-[10px] font-bold text-slate-500 uppercase">{p.nflTeam} • Rank #{p.rank}</div>
+                <div className="text-[10px] font-bold text-slate-500 uppercase">{p.nflTeam} • Rank #{p.rank} • ADP #{p.adp}</div>
               </div>
               <button onClick={() => onQuickDraftPlayer(p, currentCol, currentRound)} className="w-full py-2 bg-emerald-600/10 hover:bg-emerald-600 text-emerald-400 hover:text-white rounded-xl text-[10px] font-black transition-all flex items-center justify-center gap-1.5"><UserPlus className="w-3 h-3"/> DRAFT</button>
             </div>
@@ -121,7 +150,6 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
         {aiAnalysis && <div className="bg-emerald-950/10 border border-emerald-500/20 rounded-xl p-4 text-xs leading-relaxed text-emerald-100 font-medium whitespace-pre-line mt-2">{aiAnalysis}</div>}
       </div>
 
-      {/* Database View */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl">
         <div className="flex flex-col lg:flex-row gap-4 mb-8">
           <div className="flex flex-wrap gap-1.5 flex-1">
@@ -139,7 +167,7 @@ export const AvailablePlayersTab: React.FC<AvailablePlayersTabProps> = ({
           {filteredPlayers.slice(0, 100).map(p => (
             <div key={p.id} className="p-4 bg-slate-950/40 border border-slate-800 rounded-2xl flex items-center justify-between group hover:border-emerald-500/30 transition-all">
               <div className="flex items-center gap-4">
-                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${p.position === 'QB' ? 'bg-red-500/10 text-red-500' : p.position === 'RB' ? 'bg-blue-500/10 text-blue-500' : p.position === 'WR' ? 'bg-emerald-500/10 text-emerald-500' : 'bg-amber-500/10 text-amber-500'}`}>{p.position}</div>
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-[10px] ${p.position === 'QB' ? 'bg-red-500/10 text-red-500' : p.position === 'RB' ? 'bg-blue-500/10 text-blue-500' : p.position === 'WR' ? 'bg-emerald-500/10 text-emerald-400' : 'bg-amber-500/10 text-amber-500'}`}>{p.position}</div>
                 <div>
                   <div className="flex items-center gap-2">
                     <div className="font-bold text-sm text-slate-100">{p.name}</div>

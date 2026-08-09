@@ -3,7 +3,6 @@ import { Header } from './components/Header';
 import { DraftBoardGrid } from './components/DraftBoardGrid';
 import { EditPickModal } from './components/EditPickModal';
 import { TeamRostersTab } from './components/TeamRostersTab';
-import { SummaryStats } from './components/SummaryStats';
 import { DraftSettingsModal } from './components/DraftSettingsModal';
 import { DraftLiveStatusBar } from './components/DraftLiveStatusBar';
 import { AvailablePlayersTab } from './components/AvailablePlayersTab';
@@ -38,13 +37,13 @@ export default function App() {
   }, []);
 
   const [draftSettings, setDraftSettings] = useState<DraftSettings>({
-    total_teams: 12, total_rounds: 16, draft_type: 'snake', scoring_format: 'PPR', my_team_column: 1,
+    total_teams: 12, total_rounds: 16, draft_type: 'snake', scoring_format: 'PPR', my_team_column: 1, time_per_pick: 60,
     team_names: Object.fromEntries(Array.from({length: 16}, (_, i) => [i+1, `Team ${i+1}`])),
   });
 
   const [ocrResult, setOcrResult] = useState<OCRResult>({
     draft_info: { league_name: 'My Draft', total_teams: 12, total_rounds: 16, teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: `Team ${i + 1}` })) },
-    picks: [], summary: { total_detected: 0, avg_confidence: 1.0, processing_time_ms: 0, low_confidence_count: 0, positions_breakdown: { QB: 0, RB: 0, WR: 0, TE: 0, K: 0, DST: 0 } },
+    picks: [],
   });
 
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
@@ -60,7 +59,15 @@ export default function App() {
       const idx = prev.picks.findIndex((old) => old.round === p.round && old.team_column === p.team_column);
       let next = [...prev.picks];
       if (idx >= 0) next[idx] = p; else next.push(p);
-      return { ...prev, picks: next, summary: { ...prev.summary!, total_detected: next.length } };
+      return { ...prev, picks: next };
+    });
+  };
+
+  const handleQuickDraft = (p: NFLPlayer, col: number, round: number) => {
+    handleUpdatePick({
+      round, pick_in_round: col, overall_pick: ((round-1)*draftSettings.total_teams+col),
+      team_column: col, team_name: draftSettings.team_names[col], player_name: p.name,
+      position: p.position, nfl_team: p.nflTeam, raw_text: '', confidence: 1, status: 'confirmed'
     });
   };
 
@@ -68,21 +75,20 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans overflow-x-hidden">
       <Header hasApiKey={hasApiKey} activeTab={activeTab} setActiveTab={setActiveTab} onOpenSettings={() => setIsSettingsModalOpen(true)} onOpenManualPick={() => setIsManualModalOpen(true)} onStartNewDraft={() => setIsResetModalOpen(true)} />
       
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-hidden">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {activeTab === 'board' && (
           <div className="space-y-6">
-            <DraftLiveStatusBar settings={draftSettings} data={ocrResult} />
-            <SummaryStats data={ocrResult} />
+            <DraftLiveStatusBar settings={draftSettings} data={ocrResult} playerDatabase={playerDatabase} onQuickDraft={handleQuickDraft} />
             <DraftBoardGrid data={ocrResult} settings={draftSettings} onUpdatePick={handleUpdatePick} onAddPick={(r, c) => { setManualRound(r); setManualCol(c); setIsManualModalOpen(true); }} onEditPickClick={(p) => { setEditingPick(p); setIsEditModalOpen(true); }} />
           </div>
         )}
-        {activeTab === 'available' && <AvailablePlayersTab data={ocrResult} settings={draftSettings} playerDatabase={playerDatabase} onQuickDraftPlayer={(p, col, round) => handleUpdatePick({ round, pick_in_round: col, overall_pick: ((round-1)*draftSettings.total_teams+col), team_column: col, team_name: draftSettings.team_names[col], player_name: p.name, position: p.position, nfl_team: p.nflTeam, raw_text: '', confidence: 1, status: 'confirmed' })} />}
+        {activeTab === 'available' && <AvailablePlayersTab data={ocrResult} settings={draftSettings} playerDatabase={playerDatabase} onQuickDraftPlayer={handleQuickDraft} />}
         {activeTab === 'rosters' && <TeamRostersTab data={ocrResult} settings={draftSettings} onEditPickClick={(p) => { setEditingPick(p); setIsEditModalOpen(true); }} />}
       </main>
 
       <ResetConfirmModal isOpen={isResetModalOpen} onClose={() => setIsResetModalOpen(false)} onConfirmReset={() => { setOcrResult(prev => ({ ...prev, picks: [] })); setIsResetModalOpen(false); }} currentPicksCount={ocrResult.picks.length} />
-      <ManualPickModal isOpen={isManualModalOpen} onClose={() => setIsManualModalOpen(false)} settings={draftSettings} data={ocrResult} onSavePick={handleUpdatePick} defaultRound={manualRound} defaultCol={manualCol} />
-      <DraftSettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} settings={draftSettings} onSaveSettings={setDraftSettings} onResetBoard={() => setIsResetModalOpen(true)} />
+      <ManualPickModal isOpen={isManualModalOpen} onClose={() => setIsManualModalOpen(false)} settings={draftSettings} data={ocrResult} onSavePick={handleUpdatePick} defaultRound={manualRound} defaultCol={manualCol} playerDatabase={playerDatabase} />
+      <DraftSettingsModal isOpen={isSettingsModalOpen} onClose={() => setIsSettingsModalOpen(false)} settings={draftSettings} onSaveSettings={setDraftSettings} />
       <EditPickModal pick={editingPick} isOpen={isEditModalOpen} onClose={() => setIsEditModalOpen(false)} onSave={handleUpdatePick} onDelete={(r, c) => setOcrResult(prev => ({ ...prev, picks: prev.picks.filter(p => !(p.round === r && p.team_column === c)) }))} totalTeams={ocrResult.draft_info.total_teams} />
     </div>
   );
