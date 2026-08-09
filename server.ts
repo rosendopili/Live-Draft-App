@@ -45,12 +45,9 @@ app.post('/api/ocr', async (req, res) => {
     }
 
     const ai = getGeminiClient();
-    // Using gemini-1.5-flash as it is the most stable production model for vision
     const model = ai.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
-    const systemPrompt = `You are a fantasy football draft board OCR system. Transcribe stickers into JSON.
-Teams: ${totalTeams || 12}, Rounds: ${totalRounds || 16}. ${customInstructions || ''}`;
-
+    const systemPrompt = `You are a fantasy football draft board OCR system. Transcribe stickers into JSON. Teams: ${totalTeams || 12}, Rounds: ${totalRounds || 16}. ${customInstructions || ''}`;
     const promptText = `Extract all draft stickers: round, pick, player_name, position, nfl_team, confidence_score.`;
 
     const result = await model.generateContent({
@@ -95,7 +92,6 @@ Teams: ${totalTeams || 12}, Rounds: ${totalRounds || 16}. ${customInstructions |
     const rawPlayers = parsedData.drafted_players || [];
     
     let maxTeamCol = Number(totalTeams) || 12;
-    let maxRoundNum = Number(totalRounds) || 16;
 
     const formattedPicks = rawPlayers.map((p: any) => {
       const round = Number(p.round) || 1;
@@ -116,7 +112,7 @@ Teams: ${totalTeams || 12}, Rounds: ${totalRounds || 16}. ${customInstructions |
     });
 
     res.json({
-      draft_info: { total_teams: maxTeamCol, total_rounds: maxRoundNum, teams: [] },
+      draft_info: { total_teams: maxTeamCol, total_rounds: Number(totalRounds) || 16, teams: [] },
       picks: formattedPicks,
       summary: { total_detected: formattedPicks.length, avg_confidence: 0.9 }
     });
