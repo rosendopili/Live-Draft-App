@@ -2,6 +2,7 @@ import React, { useState, useRef } from 'react';
 import { Upload, Camera, Sparkles, Check, AlertTriangle, Image as ImageIcon, Sliders, Play, FileCheck } from 'lucide-react';
 import { SAMPLE_BOARDS } from '../data/sampleBoards';
 import { OCRResult, DraftSettings } from '../types';
+import { GoogleGenAI, Type } from '@google/genai';
 
 interface ImageUploaderProps {
   onProcessComplete: (result: OCRResult, imagePreviewUrl?: string) => void;
@@ -69,9 +70,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
     setErrorMsg(null);
     setStatusText('Preparing image & normalizing resolution...');
 
-    /**
-     * Helper to downscale large images in the browser
-     */
     const resizeImage = (base64Str: string, maxDimension: number): Promise<string> => {
       return new Promise((resolve) => {
         const img = new Image();
@@ -80,72 +78,132 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           const canvas = document.createElement('canvas');
           let width = img.width;
           let height = img.height;
-
           if (width > height) {
-            if (width > maxDimension) {
-              height *= maxDimension / width;
-              width = maxDimension;
-            }
+            if (width > maxDimension) { height *= maxDimension / width; width = maxDimension; }
           } else {
-            if (height > maxDimension) {
-              width *= maxDimension / height;
-              height = maxDimension;
-            }
+            if (height > maxDimension) { width *= maxDimension / height; height = maxDimension; }
           }
-
-          canvas.width = width;
-          canvas.height = height;
+          canvas.width = width; canvas.height = height;
           const ctx = canvas.getContext('2d');
           ctx?.drawImage(img, 0, 0, width, height);
-          resolve(canvas.toDataURL('image/jpeg', 0.7)); // 70% quality to ensure small payload
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
-        img.onerror = () => resolve(base64Str); // Fallback to original if error
+        img.onerror = () => resolve(base64Str);
       });
     };
 
     try {
-      // 1. Downscale image more aggressively to stay under Vercel's 4.5MB payload limit
-      // 1500px at 0.7 quality is usually < 1MB, well within limits.
       const optimizedImage = await resizeImage(imageData, 1500);
-      
-      setStatusText('Analyzing spatial grid & reading draft stickers with Gemini 3.6 Flash...');
+      setStatusText('Analyzing spatial grid with Gemini 1.5 Flash (Client-Side)...');
 
-      const response = await fetch('/api/ocr', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          image: optimizedImage,
-          totalTeams: teamsOverride,
-          totalRounds: roundsOverride,
-          customInstructions: customPrompt,
-          teamNames: draftSettings?.team_names,
-        }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.error || 'Failed to process image');
+      // 1. Initialize Gemini Client directly in browser
+      const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!apiKey) {
+        throw new Error('VITE_GEMINI_API_KEY is missing. Please add it to Vercel Environment Variables.');
       }
 
+      const genAI = new GoogleGenAI(apiKey);
+      const model = genAI.getGenerativeModel({ 
+        model: 'gemini-1.5-flash',
+        generationConfig: {
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              drafted_players: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    round: { type: Type.INTEGER },
+                    pick: { type: Type.INTEGER },
+                    player_name: { type: Type.STRING },
+                    position: { type: Type.STRING },
+                    nfl_team: { type: Type.STRING },
+                    confidence_score: { type: Type.NUMBER }
+                  },
+                  required: ['round', 'pick', 'player_name', 'position', 'nfl_team', 'confidence_score']
+                }
+              }
+            },
+            required: ['drafted_players']
+          }
+        }
+      });
+
+      const mimeType = 'image/jpeg';
+      const base64Data = optimizedImage.split(';base64,')[1];
+
+      const systemPrompt = `You are an expert OCR vision system specialized in reading physical fantasy football draft boards. Transcribe player draft stickers into structured JSON data. Scan row-by-row.
+Expected Teams: ${teamsOverride}, Expected Rounds: ${roundsOverride}.
+${customInstructions ? `User Context: ${customInstructions}` : ''}`;
+
+      const result = await model.generateContent({
+        contents: [{
+          role: 'user',
+          parts: [
+            { inlineData: { mimeType, data: base64Data } },
+            { text: systemPrompt + '
+
+Analyze this draft board and extract all stickers.' }
+          ]
+        }]
+      });
+
+      const response = await result.response;
+      const data = JSON.parse(response.text());
+      
+      // Post-processing to match app structure
+      const formattedPicks = (data.drafted_players || []).map((p: any) => {
+        const round = Number(p.round) || 1;
+        const pickInRound = Number(p.pick) || 1;
+        return {
+          round,
+          pick_in_round: pickInRound,
+          overall_pick: ((round - 1) * teamsOverride + pickInRound),
+          team_column: pickInRound,
+          team_name: draftSettings?.team_names[pickInRound] || `Team ${pickInRound}`,
+          player_name: p.player_name || 'Unknown',
+          position: p.position || 'WR',
+          nfl_team: p.nfl_team || 'NFL',
+          confidence: p.confidence_score || 0.9,
+          status: 'confirmed'
+        };
+      });
+
+      const finalResult: OCRResult = {
+        draft_info: {
+          total_teams: teamsOverride,
+          total_rounds: roundsOverride,
+          teams: Array.from({ length: teamsOverride }, (_, i) => ({
+            column: i + 1,
+            name: draftSettings?.team_names[i + 1] || `Team ${i + 1}`
+          }))
+        },
+        picks: formattedPicks,
+        summary: {
+          total_detected: formattedPicks.length,
+          avg_confidence: 0.9
+        }
+      };
+
       setStatusText('Extraction complete!');
-      onProcessComplete(data, imageData);
+      onProcessComplete(finalResult, imageData);
     } catch (err: any) {
-      console.error('OCR error:', err);
+      console.error('Client OCR error:', err);
       setErrorMsg(err.message || 'Error occurred during image OCR transcription.');
     } finally {
       setIsLoading(false);
     }
   };
+
   const handleSelectSample = (sample: typeof SAMPLE_BOARDS[0]) => {
     setSelectedImage(sample.thumbnailUrl);
-    // Directly pass sample pre-calculated result for instantaneous preview or offer re-scan
     onProcessComplete(sample.picksData, sample.thumbnailUrl);
   };
 
   return (
     <div className="max-w-4xl mx-auto p-4 sm:p-6 space-y-6">
-      {/* Overview Banner */}
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 shadow-xl relative overflow-hidden">
         <div className="absolute -right-10 -bottom-10 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
         <div className="relative z-10 space-y-3">
@@ -157,12 +215,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
             Upload Physical Draft Board Photo
           </h2>
           <p className="text-slate-300 text-sm max-w-2xl leading-relaxed">
-            Snap or upload a photo of your live fantasy football draft board. The vision system will scan row-by-row, map team columns, extract standard player names, normalize positions & NFL teams, and output structured JSON.
+            Snap or upload a photo of your live fantasy football draft board. The vision system will scan row-by-row and output structured JSON.
           </p>
         </div>
       </div>
 
-      {/* Main Upload Dropzone */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="md:col-span-2 space-y-4">
           <div
@@ -187,9 +244,6 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
               <div className="space-y-4">
                 <div className="relative max-h-64 rounded-lg overflow-hidden border border-slate-700 mx-auto inline-block shadow-lg">
                   <img src={selectedImage} alt="Draft Board Preview" className="max-h-64 object-contain" />
-                  <div className="absolute top-2 right-2 bg-slate-900/90 text-emerald-400 text-xs font-bold px-2.5 py-1 rounded-md border border-slate-700 backdrop-blur-sm">
-                    Image Loaded
-                  </div>
                 </div>
                 <div className="flex justify-center space-x-3">
                   <button
@@ -225,19 +279,11 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
                   <p className="text-slate-200 font-semibold text-base">
                     Click to upload or drag & drop draft board photo
                   </p>
-                  <p className="text-slate-400 text-xs mt-1">
-                    Supports high-res JPG, PNG, WEBP from phone camera or desktop
-                  </p>
-                </div>
-                <div className="inline-flex items-center space-x-2 text-slate-400 text-xs bg-slate-800/80 px-3 py-1.5 rounded-full border border-slate-700">
-                  <Camera className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Works with angled, tilted, or handwritten board photos</span>
                 </div>
               </div>
             )}
           </div>
 
-          {/* Grid Settings Override */}
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4">
             <div className="flex items-center space-x-2 text-slate-200 font-semibold text-sm">
               <Sliders className="w-4 h-4 text-emerald-400" />
@@ -246,83 +292,46 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Expected Teams (Columns)
-                </label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Expected Teams</label>
                 <select
                   value={teamsOverride}
                   onChange={(e) => setTeamsOverride(Number(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
                 >
-                  {[8, 10, 12, 14, 16].map((num) => (
-                    <option key={num} value={num}>{num} Teams</option>
-                  ))}
+                  {[8, 10, 12, 14, 16].map((num) => (<option key={num} value={num}>{num} Teams</option>))}
                 </select>
               </div>
-
               <div>
-                <label className="block text-xs font-medium text-slate-400 mb-1">
-                  Expected Rounds (Rows)
-                </label>
+                <label className="block text-xs font-medium text-slate-400 mb-1">Expected Rounds</label>
                 <select
                   value={roundsOverride}
                   onChange={(e) => setRoundsOverride(Number(e.target.value))}
-                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500"
+                  className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none"
                 >
-                  {[5, 10, 12, 15, 16, 18, 20].map((num) => (
-                    <option key={num} value={num}>{num} Rounds</option>
-                  ))}
+                  {[5, 10, 12, 15, 16, 18, 20].map((num) => (<option key={num} value={num}>{num} Rounds</option>))}
                 </select>
               </div>
-            </div>
-
-            <div>
-              <label className="block text-xs font-medium text-slate-400 mb-1">
-                Custom OCR Disambiguation Context (Optional)
-              </label>
-              <input
-                type="text"
-                placeholder="e.g. League uses PPR scoring, team 3 is 'The Champs', Round 1-3 only"
-                value={customPrompt}
-                onChange={(e) => setCustomPrompt(e.target.value)}
-                className="w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500 placeholder-slate-500"
-              />
             </div>
           </div>
         </div>
 
-        {/* Quick Sample Boards Sidebar */}
         <div className="space-y-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-3">
             <div className="flex items-center space-x-2 text-slate-200 font-semibold text-sm">
               <FileCheck className="w-4 h-4 text-emerald-400" />
               <span>Or Try Sample Draft Boards</span>
             </div>
-            <p className="text-slate-400 text-xs">
-              Test the vision transcription system instantly with sample physical draft board renders.
-            </p>
-
             <div className="space-y-3 pt-2">
               {SAMPLE_BOARDS.map((board) => (
                 <div
                   key={board.id}
                   onClick={() => handleSelectSample(board)}
-                  className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 hover:border-emerald-500/50 rounded-xl p-3 cursor-pointer transition-all space-y-2 group"
+                  className="bg-slate-800/80 hover:bg-slate-800 border border-slate-700/80 rounded-xl p-3 cursor-pointer transition-all group"
                 >
                   <div className="h-24 rounded-lg overflow-hidden bg-slate-950 border border-slate-800 relative">
-                    <img src={board.thumbnailUrl} alt={board.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
-                    <div className="absolute bottom-1 right-1 bg-slate-900/90 text-[10px] font-bold text-emerald-400 px-2 py-0.5 rounded border border-slate-700">
-                      {board.teams} Teams × {board.rounds} Rounds
-                    </div>
+                    <img src={board.thumbnailUrl} alt={board.title} className="w-full h-full object-cover" />
                   </div>
-                  <div>
-                    <h4 className="text-xs font-bold text-slate-200 group-hover:text-emerald-400 transition-colors">
-                      {board.title}
-                    </h4>
-                    <p className="text-[11px] text-slate-400 line-clamp-2 mt-0.5">
-                      {board.description}
-                    </p>
-                  </div>
+                  <h4 className="text-xs font-bold text-slate-200 mt-2">{board.title}</h4>
                 </div>
               ))}
             </div>
@@ -330,34 +339,22 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
         </div>
       </div>
 
-      {/* Loading Overlay */}
       {isLoading && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full text-center space-y-4 shadow-2xl">
             <div className="relative w-16 h-16 mx-auto">
-              <div className="absolute inset-0 rounded-full border-4 border-slate-800"></div>
               <div className="absolute inset-0 rounded-full border-4 border-emerald-500 border-t-transparent animate-spin"></div>
-              <Sparkles className="w-6 h-6 text-emerald-400 absolute inset-0 m-auto animate-pulse" />
             </div>
-            <div className="space-y-1">
-              <h3 className="text-lg font-bold text-white">Transcribing Draft Board</h3>
-              <p className="text-xs text-emerald-400 font-medium">{statusText}</p>
-            </div>
-            <p className="text-slate-400 text-xs">
-              Gemini Vision AI is analyzing row-by-row sticker grid alignment, normalizing player names, and validating position abbreviations...
-            </p>
+            <h3 className="text-lg font-bold text-white">Transcribing Draft Board</h3>
+            <p className="text-xs text-emerald-400 font-medium">{statusText}</p>
           </div>
         </div>
       )}
 
-      {/* Error Notice */}
       {errorMsg && (
         <div className="bg-red-950/50 border border-red-500/40 rounded-xl p-4 flex items-start space-x-3 text-red-200 text-xs">
           <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0 mt-0.5" />
-          <div className="space-y-1">
-            <span className="font-bold block">OCR System Notice</span>
-            <span>{errorMsg}</span>
-          </div>
+          <div><span className="font-bold block">OCR System Notice</span>{errorMsg}</div>
         </div>
       )}
     </div>
