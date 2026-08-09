@@ -19,15 +19,15 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex flex-col md:flex-row md:items-center justify-between py-2 md:h-16 gap-3">
           <div className="flex items-center justify-between w-full md:w-auto">
-            <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('board')}>
-              <div className="bg-stone-800 p-1 rounded-lg border border-stone-700 shadow-inner">
+            <div className="flex items-center gap-4 cursor-pointer" onClick={() => setActiveTab('board')}>
+              <div className="bg-stone-800 p-1.5 rounded-xl border border-stone-700 shadow-inner">
                 <img 
                   src={logoImg} 
                   alt="Leatherheads Logo" 
-                  className="w-8 h-8 object-contain"
+                  className="w-12 h-12 md:w-16 md:h-16 object-contain"
                 />
               </div>
-              <span className="text-xl font-black tracking-tighter text-stone-100 uppercase">LEATHERHEADS</span>
+              <span className="text-2xl md:text-3xl font-black tracking-tighter text-stone-100 uppercase">LEATHERHEADS</span>
             </div>
             
             <div className="flex items-center gap-1 md:hidden">
