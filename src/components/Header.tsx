@@ -21,11 +21,10 @@ export const Header: React.FC<HeaderProps> = ({
             <div className="flex items-center gap-3 cursor-pointer" onClick={() => setActiveTab('board')}>
               <div className="bg-stone-800 p-1 rounded-lg border border-stone-700 shadow-inner">
                 <img 
-                  src="https://raw.githubusercontent.com/rosendopili/Live-Draft-App/main/assets/logo.png" 
+                  src="/assets/logo.png" 
                   alt="Leatherheads Logo" 
                   className="w-8 h-8 object-contain"
                   onError={(e) => {
-                    // Fallback if image not yet in repo
                     e.currentTarget.style.display = 'none';
                     e.currentTarget.parentElement!.innerHTML = '<div class="w-8 h-8 bg-amber-900 rounded-full"></div>';
                   }}

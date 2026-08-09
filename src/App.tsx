@@ -3,7 +3,6 @@ import { Header } from './components/Header';
 import { DraftBoardGrid } from './components/DraftBoardGrid';
 import { EditPickModal } from './components/EditPickModal';
 import { TeamRostersTab } from './components/TeamRostersTab';
-import { SummaryStats } from './components/SummaryStats';
 import { DraftSettingsModal } from './components/DraftSettingsModal';
 import { DraftLiveStatusBar } from './components/DraftLiveStatusBar';
 import { AvailablePlayersTab } from './components/AvailablePlayersTab';
@@ -39,11 +38,11 @@ export default function App() {
 
   const [draftSettings, setDraftSettings] = useState<DraftSettings>({
     total_teams: 12, total_rounds: 16, draft_type: 'snake', scoring_format: 'PPR', my_team_column: 1, time_per_pick: 60,
-    team_names: Object.fromEntries(Array.from({length: 16}, (_, i) => [i+1, `Team ${i+1}`])),
+    team_names: Object.fromEntries(Array.from({length: 16}, (_, i) => [i+1, \`Team \${i+1}\`])),
   });
 
   const [ocrResult, setOcrResult] = useState<OCRResult>({
-    draft_info: { league_name: 'My Draft', total_teams: 12, total_rounds: 16, teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: `Team ${i + 1}` })) },
+    draft_info: { league_name: 'My Draft', total_teams: 12, total_rounds: 16, teams: Array.from({ length: 12 }, (_, i) => ({ column: i + 1, name: \`Team \${i + 1}\` })) },
     picks: [],
   });
 
@@ -76,11 +75,10 @@ export default function App() {
     <div className="min-h-screen bg-stone-950 text-stone-100 flex flex-col font-sans overflow-x-hidden selection:bg-amber-600 selection:text-white">
       <Header hasApiKey={hasApiKey} activeTab={activeTab} setActiveTab={setActiveTab} onOpenSettings={() => setIsSettingsModalOpen(true)} onOpenManualPick={() => setIsManualModalOpen(true)} onStartNewDraft={() => setIsResetModalOpen(true)} />
       
-      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6 overflow-hidden">
+      <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {activeTab === 'board' && (
           <div className="space-y-6">
             <DraftLiveStatusBar settings={draftSettings} data={ocrResult} playerDatabase={playerDatabase} onQuickDraft={handleQuickDraft} />
-            <SummaryStats data={ocrResult} />
             <DraftBoardGrid data={ocrResult} settings={draftSettings} onUpdatePick={handleUpdatePick} onAddPick={(r, c) => { setManualRound(r); setManualCol(c); setIsManualModalOpen(true); }} onEditPickClick={(p) => { setEditingPick(p); setIsEditModalOpen(true); }} />
           </div>
         )}
