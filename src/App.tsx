@@ -73,7 +73,14 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans">
-      <Header hasApiKey={hasApiKey} activeTab={activeTab} setActiveTab={setActiveTab} detectedCount={ocrResult.picks.length} onOpenManualPick={() => setIsManualModalOpen(true)} onStartNewDraft={() => setIsResetModalOpen(true)} />
+      <Header 
+        hasApiKey={hasApiKey} 
+        activeTab={activeTab} 
+        setActiveTab={setActiveTab} 
+        onOpenSettings={() => setIsSettingsModalOpen(true)}
+        onOpenManualPick={() => setIsManualModalOpen(true)} 
+        onStartNewDraft={() => setIsResetModalOpen(true)} 
+      />
       
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 space-y-6">
         {activeTab === 'board' && (
