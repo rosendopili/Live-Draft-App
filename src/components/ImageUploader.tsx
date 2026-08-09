@@ -121,7 +121,22 @@ export const ImageUploader: React.FC<ImageUploaderProps> = ({
           teamNames: draftSettings?.team_names,
         }),
       });
-// ... existing code ...
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to process image');
+      }
+
+      setStatusText('Extraction complete!');
+      onProcessComplete(data, imageData);
+    } catch (err: any) {
+      console.error('OCR error:', err);
+      setErrorMsg(err.message || 'Error occurred during image OCR transcription.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
   const handleSelectSample = (sample: typeof SAMPLE_BOARDS[0]) => {
     setSelectedImage(sample.thumbnailUrl);
     // Directly pass sample pre-calculated result for instantaneous preview or offer re-scan
